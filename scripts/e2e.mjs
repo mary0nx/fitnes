@@ -200,8 +200,55 @@ ok(await page.getByText('Ustawienia').count() > 0, 'польская локал�
 await page.getByText('Ciemny').click(); await wait(400); await shot('settings-pl-dark', true);
 ok(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'тёмная тема включается');
 await page.goto(`${url}#/`); await wait(600); await shot('home-pl-dark', true);
+await page.goto(`${url}#/exercise/glute_bridge`); await page.locator('.play-btn').waitFor({ timeout: 30000 }); await wait(900); await shot('exercise-pl-dark');
+await page.goto(`${url}#/nutrition`); await wait(500); await shot('nutrition-pl-dark', true);
+await page.goto(`${url}#/train`); await wait(500); await shot('train-pl-dark', true);
 await page.goto(`${url}#/settings`); await page.getByText('Русский').click(); await page.getByText('Светлая').click();
 await page.goto(`${url}#/install`); await wait(300); await shot('install');
+
+
+step('13. Своя тренировка, перенос, замеры, фото, экспорт');
+await page.goto(`${url}#/workout-edit/new`); await page.getByPlaceholder('Название тренировки').fill('Утренняя зарядка');
+await click('Добавить упражнение'); await page.locator('.sheet').getByText('Планка', { exact: true }).click();
+await click('Добавить упражнение'); await page.locator('.sheet').getByText('Скручивания', { exact: true }).click();
+await shot('workout-edit', true);
+await click('Сохранить'); await wait(500);
+s = await state();
+const mine = Object.values(s.plan.workouts).find((w) => w.custom);
+ok(mine?.items.length === 2 && mine.name.ru === 'Утренняя зарядка', 'своя тренировка создана из каталога');
+await page.goto(`${url}#/schedule`); await page.getByText('Понедельник').click();
+await page.locator('.sheet').getByText('Утренняя зарядка').click(); await wait(300); await shot('schedule', true);
+ok((await state()).plan.week[0] === mine.id, 'расписание изменено: понедельник — своя тренировка');
+const mon = new Date(); mon.setDate(mon.getDate() + ((7 - ((mon.getDay() + 6) % 7)) % 7 || 7));
+const monIso = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+await page.goto(`${url}#/train?d=${monIso}`); await page.getByText('Утренняя зарядка').first().waitFor();
+await click('Перенести'); await page.getByText('выбери свободный день').waitFor();
+await page.locator('.sheet .opt').first().click(); await wait(400);
+s = await state();
+ok(s.plan.overrides[monIso] === null && Object.values(s.plan.overrides).includes(mine.id), 'тренировка перенесена на другой день');
+await page.goto(`${url}#/progress`); await page.getByText('Объёмы тела').waitFor();
+await page.locator('.card', { hasText: 'Объёмы тела' }).getByRole('button', { name: 'Добавить' }).click();
+await page.getByLabel('Талия').fill('66'); await page.getByLabel('Бёдра').fill('94');
+await page.locator('.sheet').getByRole('button', { name: 'Сохранить' }).click(); await wait(300);
+ok((await state()).measures[0]?.values.waist === 66, 'замеры сохранены');
+await page.goto(`${url}#/photos`); await page.getByText('Пока нет фотографий').waitFor();
+await page.locator('input[type=file]').setInputFiles(new URL('../public/icons/icon-192.png', import.meta.url).pathname);
+await page.locator('.photo').first().waitFor(); await wait(300); await shot('photos');
+ok((await state()).photos.length === 1, 'фото добавлено в приватный дневник (IndexedDB)');
+await page.goto(`${url}#/achievements`); await wait(400); await shot('achievements', true);
+await page.goto(`${url}#/settings`);
+const [dl] = await Promise.all([page.waitForEvent('download'), click('Экспорт данных')]);
+ok(dl.suggestedFilename().startsWith('womens-fitness-'), `экспорт данных: ${dl.suggestedFilename()}`);
+
+step('14. Узкий экран 320 px — без горизонтальной прокрутки');
+await page.setViewportSize({ width: 320, height: 640 });
+for (const r of ['/', '/train', '/train/catalog', '/nutrition', '/progress', '/profile', '/settings', '/exercise/leg_press']) {
+  await page.goto(`${url}#${r}`); await wait(350);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  ok(over <= 1, `${r}: ширина в пределах экрана`);
+}
+await page.goto(`${url}#/`); await shot('home-320', true);
+await page.setViewportSize({ width: 390, height: 844 });
 
 console.log(`\n${failed ? `ПРОВАЛЕНО: ${failed}` : 'Все проверки пройдены'}${errors.length ? `\nОшибки в консоли:\n - ${[...new Set(errors)].join('\n - ')}` : '\nОшибок в консоли нет'}`);
 await browser.close();

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import { resolve } from 'node:path';
+
 
 // base './' — приложение работает из любой подпапки (GitHub Pages, Netlify, свой хостинг).
 export default defineConfig(({ command }) => ({
@@ -41,7 +41,7 @@ export default defineConfig(({ command }) => ({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       // render.html — служебная страница для пререндера миниатюр, в прод-сборку не входит
-      input: command === 'build' ? { main: resolve(__dirname, 'index.html') } : undefined,
+      input: command === 'build' ? { main: new URL('./index.html', import.meta.url).pathname } : undefined,
     },
   },
   test: { environment: 'node', include: ['src/**/*.test.ts'] },

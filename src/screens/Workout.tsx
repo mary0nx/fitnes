@@ -363,6 +363,7 @@ export function WorkoutDone({ id }: { id: string }) {
   useEffect(() => { if (!s) nav('/', true); }, [s]);
   if (!s) return null;
   const tons = tonnage(s);
+  const exDone = s.exercises.filter((x) => x.sets.some((y) => y.done)).length;
   return (
     <div className="done-screen">
       <div className="confetti" aria-hidden>{confetti.map((c, i) => <i key={i} style={{ left: c.left, background: c.color, animationDelay: c.delay, animationDuration: c.dur, transform: `rotate(${c.rot})` }} />)}</div>
@@ -373,7 +374,7 @@ export function WorkoutDone({ id }: { id: string }) {
       <div className="done-stats">
         <div><b className="num">{s.kcal}</b><span>{t('unit.kcal')}</span></div>
         <div><b className="num">{Math.max(1, Math.round(s.durationSec / 60))}</b><span>{t('unit.min')}</span></div>
-        <div><b className="num">{s.exercises.filter((x) => x.sets.some((y) => y.done)).length}</b><span>{t('done.exercises')}</span></div>
+        <div><b className="num">{exDone}</b><span>{t('done.exercises', { n: exDone })}</span></div>
       </div>
       {tons > 0 ? <p className="small" style={{ opacity: 0.9 }}>{t('done.tonnage', { v: Math.round(toUnit(tons, unit)), u: t(unit === 'kg' ? 'unit.kg' : 'unit.lb') })}</p> : null}
       <button className="btn primary block" onClick={() => nav('/', true)}>{t('done.ok')}</button>

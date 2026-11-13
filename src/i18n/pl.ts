@@ -113,7 +113,7 @@ export const pl: Record<keyof typeof ru, string> = {
   'rest.water': 'Pamiętaj o wodzie · +250 ml', 'rest.waterAdded': 'Dodano 250 ml wody', 'rest.nextSet': 'Dalej',
   'rest.over': 'Koniec przerwy', 'rest.over.d': 'Czas na kolejną serię',
   'rep.title': 'Zamień ćwiczenie', 'rep.current': 'Bieżące ćwiczenie', 'rep.choose': 'Wybierz alternatywę:', 'rep.none': 'Nie znaleziono odpowiednich zamienników',
-  'done.title': 'Trening ukończony!', 'done.exercises': 'ćwiczeń', 'done.ok': 'Świetnie!', 'done.progress': 'Zobacz postępy',
+  'done.title': 'Trening ukończony!', 'done.exercises': 'ćwiczenie|ćwiczenia|ćwiczeń', 'done.ok': 'Świetnie!', 'done.progress': 'Zobacz postępy',
   'done.tonnage': 'Łącznie podniesiono: {v} {u}',
 
   'nut.of': 'z {n} kcal', 'nut.left': 'Na dziś zostało {n} kcal', 'nut.over': 'Norma przekroczona o {n} kcal',

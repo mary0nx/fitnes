@@ -560,7 +560,7 @@ input[type='range'].range::-moz-range-thumb {
 
 .done-screen { position: relative; flex: 1; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 24px 22px calc(var(--safe-b) + 26px); gap: 18px; color: #fff; overflow: hidden;
   background: linear-gradient(180deg, #7B5488 0%, #A9659B 50%, #D987B0 100%); text-align: center; }
-.done-screen .hero-img { position: absolute; left: 0; right: 0; top: 0; height: 62%; width: 100%; object-fit: contain; object-position: bottom; }
+.done-screen .hero-img { position: absolute; left: 0; right: 0; top: 2%; height: 46%; width: 100%; object-fit: contain; object-position: bottom; -webkit-mask-image: linear-gradient(#000 72%, transparent 96%); mask-image: linear-gradient(#000 72%, transparent 96%); }
 .done-screen h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
 .done-screen > * { position: relative; z-index: 2; }
 .done-check { width: 76px; height: 76px; border-radius: 50%; background: var(--grad-pink); display: grid; place-items: center; box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.16), var(--shadow-pink); animation: pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1); }

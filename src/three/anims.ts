@@ -1,5 +1,5 @@
 import type { ExerciseAnim, Prim } from './stage';
-import { lerpPose, smooth, type BoneKey, type Pose, type V3 } from './rig';
+import { lerpPose, smooth, type BoneKey, type Pose, type V3 } from './pose';
 
 /**
  * Процедурные анимации упражнений: ключевые позы скелета + IK-цели (стопы на
