@@ -5,6 +5,7 @@ export const ru = {
   'common.date': 'Дата', 'common.delete': 'Удалить', 'common.edit': 'Изменить', 'common.loading': 'Загрузка…',
   'common.next': 'Далее', 'common.pause': 'Пауза', 'common.save': 'Сохранить', 'common.saved': 'Сохранено',
   'common.setup': 'Настроить', 'common.start': 'Начать',
+  'common.typeIn': 'Ввести вручную', 'common.tapToType': 'Нажми на число, чтобы ввести вручную', 'common.less': 'меньше', 'common.more': 'больше',
   'common.exercises': '{n} упражнение|{n} упражнения|{n} упражнений',
   'common.min': '{n} минута|{n} минуты|{n} минут',
   'common.sets': '{n} подход|{n} подхода|{n} подходов',

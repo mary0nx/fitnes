@@ -6,6 +6,7 @@ export const pl: Record<keyof typeof ru, string> = {
   'common.date': 'Data', 'common.delete': 'Usuń', 'common.edit': 'Edytuj', 'common.loading': 'Ładowanie…',
   'common.next': 'Dalej', 'common.pause': 'Pauza', 'common.save': 'Zapisz', 'common.saved': 'Zapisano',
   'common.setup': 'Ustaw', 'common.start': 'Zaczynamy',
+  'common.typeIn': 'Wpisz ręcznie', 'common.tapToType': 'Dotknij liczby, aby wpisać ręcznie', 'common.less': 'mniej', 'common.more': 'więcej',
   'common.exercises': '{n} ćwiczenie|{n} ćwiczenia|{n} ćwiczeń',
   'common.min': '{n} minuta|{n} minuty|{n} minut',
   'common.sets': '{n} seria|{n} serie|{n} serii',

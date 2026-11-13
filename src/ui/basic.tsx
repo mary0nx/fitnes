@@ -178,3 +178,40 @@ export function useCountUp(target: number, ms = 700): number {
   }, [target, ms]);
   return v;
 }
+
+/* ---------- крупное значение: нажми на число, чтобы ввести вручную ---------- */
+export function BigValue({ value, unit, min, max, step, digits = 0, onChange, label, typeLabel, lessLabel, moreLabel }: {
+  value: number; unit: string; min: number; max: number; step: number; digits?: number; onChange: (v: number) => void;
+  label: string; typeLabel: string; lessLabel: string; moreLabel: string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const k = 10 ** digits;
+  const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v * k) / k));
+  const shown = digits ? value.toFixed(digits).replace(/\.0+$/, '') : String(Math.round(value));
+  const commit = () => {
+    if (text === null) return;
+    const v = parseFloat(text.replace(',', '.'));
+    if (!Number.isNaN(v)) onChange(clamp(v));
+    setText(null);
+  };
+  return (
+    <div className="big-value num">
+      <button className="icon-btn" aria-label={`${label}: ${lessLabel}`} onClick={() => onChange(clamp(value - step))}><Minus size={20} /></button>
+      {text === null ? (
+        <button className="val" aria-label={typeLabel} onClick={() => setText(shown)}>{shown}<small>{unit}</small></button>
+      ) : (
+        <span className="val editing">
+          <input
+            autoFocus inputMode="decimal" enterKeyHint="done" aria-label={typeLabel} value={text} maxLength={6}
+            style={{ width: `${Math.max(2, text.length) + 0.6}ch` }}
+            onChange={(e) => setText(e.target.value.replace(/[^0-9.,]/g, ''))}
+            onFocus={(e) => e.target.select()} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setText(null); }}
+          />
+          <small>{unit}</small>
+        </span>
+      )}
+      <button className="icon-btn" aria-label={`${label}: ${moreLabel}`} onClick={() => onChange(clamp(value + step))}><Plus size={20} /></button>
+    </div>
+  );
+}

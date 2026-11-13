@@ -385,7 +385,13 @@ input[type='range'].range::-moz-range-thumb {
 .opt.compact { min-height: 54px; padding: 8px 16px; justify-content: center; text-align: center; }
 .opt .check { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: var(--pink); display: grid; place-items: center; flex: none; opacity: 0; transform: scale(0.5); transition: all 0.2s; }
 .opt.on .check { opacity: 1; transform: none; }
-.big-value { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; text-align: center; line-height: 1; }
+.big-value { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; text-align: center; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.big-value .val { font: inherit; letter-spacing: inherit; line-height: 1; padding: 6px 12px 8px; border-radius: 20px; min-width: 150px; display: inline-flex; align-items: baseline; justify-content: center; border-bottom: 2px dashed var(--pink-soft); transition: background 0.2s; }
+.big-value button.val:active { background: var(--field); }
+.big-value .val.editing { background: var(--card-solid); border-bottom-style: solid; border-bottom-color: var(--pink); box-shadow: var(--shadow); }
+.big-value .val input { font: inherit; letter-spacing: inherit; border: 0; outline: 0; background: none; text-align: center; padding: 0; min-width: 0; color: var(--text); caret-color: var(--pink); }
+.big-value .icon-btn { width: 46px; height: 46px; }
+.type-hint { text-align: center; font-size: 12.5px; color: var(--text-2); font-weight: 600; margin-top: -6px; }
 .big-value small { font-size: 26px; font-weight: 700; margin-left: 6px; letter-spacing: -0.01em; }
 .range-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); font-weight: 600; margin-top: -4px; }
 

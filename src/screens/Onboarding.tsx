@@ -7,7 +7,7 @@ import type { Goal, Level, Limitation, Place, Profile, WeightUnit } from '../dom
 import { fromUnit, toUnit } from '../domain/units';
 import { useT, WEEKDAYS_SHORT } from '../i18n';
 import { useStore } from '../store';
-import { Ring, Seg, Thumb } from '../ui/basic';
+import { BigValue, Ring, Seg, Thumb } from '../ui/basic';
 import { Wheel } from '../ui/Wheel';
 
 interface Draft {
@@ -117,7 +117,10 @@ function Step({ d, up, unit }: { d: Draft; up: (p: Partial<Draft>) => void; unit
     const step = unit === 'kg' ? 0.5 : 1;
     return (
       <>
-        <div className="big-value num">{unit === 'kg' ? v.toFixed(1).replace('.0', '') : Math.round(v)}<small>{u}</small></div>
+        <BigValue value={v} unit={u} min={min} max={max} step={step} digits={unit === 'kg' ? 1 : 0} label={label}
+          typeLabel={t('common.typeIn')} lessLabel={t('common.less')} moreLabel={t('common.more')}
+          onChange={(x) => onChange(round1(fromUnit(x, unit)))} />
+        <div className="type-hint">{t('common.tapToType')}</div>
         <input
           className="range" type="range" aria-label={label} min={min} max={max} step={step} value={v}
           style={{ ['--p' as string]: `${((v - min) / (max - min)) * 100}%` }}
@@ -174,7 +177,9 @@ function Step({ d, up, unit }: { d: Draft; up: (p: Partial<Draft>) => void; unit
         <div className="ob-body">
           <h1>{t('ob.height.title')}</h1>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
-            <div className="big-value num">{d.heightCm}<small>{t('unit.cm')}</small></div>
+            <BigValue value={d.heightCm} unit={t('unit.cm')} min={min} max={max} step={1} label={t('ob.height.title')}
+              typeLabel={t('common.typeIn')} lessLabel={t('common.less')} moreLabel={t('common.more')} onChange={(x) => up({ heightCm: x })} />
+            <div className="type-hint">{t('common.tapToType')}</div>
             <input className="range" type="range" aria-label={t('ob.height.title')} min={min} max={max} value={d.heightCm}
               style={{ ['--p' as string]: `${((d.heightCm - min) / (max - min)) * 100}%` }} onChange={(e) => up({ heightCm: Number(e.target.value) })} />
             <div className="range-ends num"><span>{min}</span><span>{max}</span></div>
