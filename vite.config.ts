@@ -4,12 +4,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 
 // base './' — приложение работает из любой подпапки (GitHub Pages, Netlify, свой хостинг).
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '1.0.0') },
   base: './',
   plugins: [
     react(),
-    VitePWA({
+    // режим preview — сборка для встроенного предпросмотра без service worker
+    mode !== 'preview' && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png', 'models/*.glb', 'media/**/*.webp'],
       manifest: {

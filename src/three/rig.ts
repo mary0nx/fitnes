@@ -48,7 +48,16 @@ export const MODEL_HEIGHT = 1.68;
 /** Загрузка модели (один раз на приложение). */
 export function loadModel(url = MODEL_URL): Promise<THREE.Group> {
   if (!gltfPromise) {
-    gltfPromise = new GLTFLoader().loadAsync(url).then((g) => g.scene);
+    const loader = new GLTFLoader();
+    // режим preview: хостинг предпросмотра не отдаёт .glb, модель лежит рядом как base64 в JSON
+    gltfPromise = (import.meta.env.MODE === 'preview'
+      ? fetch(url.replace(/\.glb$/, '.json')).then((r) => r.json()).then((j: { glb: string }) => {
+        const bin = atob(j.glb);
+        const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        return loader.parseAsync(buf.buffer, '');
+      })
+      : loader.loadAsync(url)).then((g) => g.scene);
     gltfPromise.catch(() => { gltfPromise = null; });
   }
   return gltfPromise;
