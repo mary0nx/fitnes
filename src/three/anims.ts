@@ -129,8 +129,8 @@ export const ANIMS: Record<string, ExerciseAnim> = {
   },
   goblet_squat: {
     pose: squat(
-      { arm: [-28, 0, -76], forearm: [0, -122, 44] },
-      { arm: [-34, 0, -76], forearm: [0, -122, 44] },
+      { arm: [-18, 0, -80], forearm: [0, -142, 6] },
+      { arm: [-26, 0, -80], forearm: [0, -142, 6] },
     ),
     duration: 3.2, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 }, flatFeet: 'both', grip: 0.9,
     props: dumbbells(), view: { az: 35, el: 8 }, thumb: 0.5,

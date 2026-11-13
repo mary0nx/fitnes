@@ -94,13 +94,13 @@ export class Stage {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.maxPixelRatio ?? 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = opts.shadows !== false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // студийный свет: мягкий заполняющий, ключевой и розовый контровой
-    this.scene.add(new THREE.HemisphereLight(0xfff1f8, 0xb9a0cf, 1.25));
-    const key = new THREE.DirectionalLight(0xfff4ee, 2.3);
+    this.scene.add(new THREE.HemisphereLight(0xfff1f8, 0x9a86b4, 1.05));
+    const key = new THREE.DirectionalLight(0xfff4ee, 2.0);
     key.position.set(2.2, 4.2, 3.2);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -128,7 +128,7 @@ export class Stage {
     this.geos.push(shadow.geometry);
 
     const disc = new THREE.Mesh(new THREE.CircleGeometry(1.9, 64), new THREE.MeshBasicMaterial({
-      map: radialTexture(), transparent: true, depthWrite: false, opacity: 0.9,
+      map: radialTexture(), transparent: true, depthWrite: false, opacity: 0.55,
     }));
     disc.rotation.x = -Math.PI / 2;
     disc.position.y = -0.002;
@@ -138,8 +138,8 @@ export class Stage {
     this.scene.add(this.props);
   }
 
-  async init(): Promise<void> {
-    const src = await loadModel();
+  async init(modelUrl?: string): Promise<void> {
+    const src = await loadModel(modelUrl);
     if (this.disposed) return;
     this.rig = new Rig(src);
     this.scene.add(this.rig.root);
@@ -312,8 +312,8 @@ export class Stage {
   };
 
   /** Подсветить работающие мышцы на модели. */
-  setHighlight(primary: Region[] | null, secondary: Region[] = []) {
-    if (this.rig) highlightMuscles(this.rig.model, primary, secondary);
+  setHighlight(primary: Region[] | null, secondary: Region[] = [], stabilizers: Region[] = []) {
+    if (this.rig) highlightMuscles(this.rig.model, primary, secondary, stabilizers);
   }
 
   start() {

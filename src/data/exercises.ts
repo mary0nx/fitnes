@@ -46,7 +46,20 @@ export const EQUIPMENT_NAMES = {
   cardio: x('Кардиотренажёр', 'Maszyna kardio'),
 } as const;
 
-export const EXERCISES: Exercise[] = [
+/** Стабилизаторы по упражнениям (третий уровень подсветки на модели). */
+const STABILIZERS: Record<string, Muscle[]> = {
+  barbell_squat: ['abs', 'calves'], hack_squat: ['calves', 'abs'], goblet_squat: ['lowerBack', 'calves'], squat_bw: ['lowerBack', 'calves'],
+  bulgarian_split: ['calves', 'lowerBack'], lunge: ['lowerBack', 'obliques'], romanian_deadlift: ['abs', 'traps', 'lats'],
+  glute_bridge: ['obliques', 'quads'], leg_press: ['calves'], kickback: ['abs', 'obliques'], leg_curl: ['lowerBack'], leg_extension: ['abs'],
+  crunch: [], plank: ['quads', 'traps'], leg_raise: ['adductors'], bicycle: ['adductors'], reverse_crunch: ['lowerBack'],
+  shoulder_press: ['abs', 'lowerBack'], front_raise: ['abs', 'forearms'], lateral_raise: ['abs', 'forearms'],
+  triceps_extension: ['abs', 'forearms'], biceps_curl: ['shoulders', 'abs'],
+  lat_pulldown: ['shoulders', 'abs'], seated_row: ['shoulders', 'abs'], dumbbell_row: ['shoulders', 'abs', 'lowerBack'], hyperextension: ['abs'],
+  dumbbell_bench_press: ['abs', 'forearms'], chest_press_machine: ['forearms'], pushup: ['lowerBack', 'quads'], dumbbell_fly: ['biceps', 'forearms'],
+  walking: ['abs'], running: ['abs', 'shoulders'], bike: ['abs'], elliptical: ['abs'], stretch_forward: [], stretch_side: ['abs'],
+};
+
+const RAW: Omit<Exercise, 'stabilizers'>[] = [
   /* ================= НОГИ И ЯГОДИЦЫ ================= */
   {
     id: 'barbell_squat', name: x('Приседания со штангой', 'Przysiady ze sztangą'), category: 'legs',
@@ -698,11 +711,16 @@ export const EXERCISES: Exercise[] = [
   },
 ];
 
+export const EXERCISES: Exercise[] = RAW.map((e) => ({
+  ...e,
+  stabilizers: (STABILIZERS[e.id] ?? []).filter((m) => !e.primary.includes(m) && !e.secondary.includes(m)),
+}));
+
 export const EX_BY_ID: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 export const getExercise = (id: string): Exercise => EX_BY_ID[id] ?? EXERCISES[0];
 
 const BASE = import.meta.env?.BASE_URL ?? './';
 /** Миниатюра — пререндер той же 3D-анимации, поэтому всегда соответствует упражнению. */
 export const thumbUrl = (id: string) => `${BASE}media/thumbs/${id}.webp`;
-export const muscleUrl = (id: string) => `${BASE}media/muscles/${id}.webp`;
+export const muscleUrl = (id: string, side: 'f' | 'b') => `${BASE}media/muscles/${id}-${side}.webp`;
 export const mediaUrl = (name: string) => `${BASE}media/${name}.webp`;

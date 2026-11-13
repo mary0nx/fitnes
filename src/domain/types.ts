@@ -25,6 +25,8 @@ export interface Exercise {
   category: Category;
   primary: Muscle[];
   secondary: Muscle[];
+  /** мышцы-стабилизаторы (удерживают положение тела) */
+  stabilizers: Muscle[];
   equipment: Equipment[];
   places: Place[];
   level: Level;

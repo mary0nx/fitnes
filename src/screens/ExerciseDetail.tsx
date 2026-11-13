@@ -10,18 +10,40 @@ import type { Region } from '../three/rig';
 import { Empty, Header, Thumb } from '../ui/basic';
 import { ExerciseViewer } from '../ui/Viewer';
 
-export const toRegions = (m: Muscle[]): Region[] => m.filter((x) => x !== 'heart') as Region[];
+export interface MuscleSets { primary: Region[]; secondary: Region[]; stabilizers: Region[] }
+/** Мышцы упражнения для подсветки на модели. У кардио «основная» — сердце, поэтому показываем работающие мышцы. */
+export function muscleSets(e: Exercise): MuscleSets {
+  const reg = (m: Muscle[]) => m.filter((x) => x !== 'heart') as Region[];
+  const p = reg(e.primary);
+  return p.length
+    ? { primary: p, secondary: reg(e.secondary), stabilizers: reg(e.stabilizers) }
+    : { primary: reg(e.secondary), secondary: [], stabilizers: reg(e.stabilizers) };
+}
 
 export function MusclesCard({ e }: { e: Exercise }) {
   const { t, tr } = useT();
+  const names = (m: Muscle[]) => m.map((x) => tr(MUSCLE_NAMES[x])).join(', ');
+  const tiers = [
+    { cls: 'm1', title: t('ex.m.primary'), list: e.primary },
+    { cls: 'm2', title: t('ex.m.secondary'), list: e.secondary },
+    { cls: 'm3', title: t('ex.m.stab'), list: e.stabilizers },
+  ].filter((x) => x.list.length);
   return (
     <div className="card">
       <div className="bold" style={{ marginBottom: 10 }}>{t('ex.muscles')}</div>
       <div className="muscle-card">
-        <div className="pic"><img src={muscleUrl(e.id)} alt="" loading="lazy" onError={(ev) => ((ev.target as HTMLElement).style.display = 'none')} /></div>
-        <div className="grow">
-          {e.primary.map((m) => <div key={m} className="dot-li">{tr(MUSCLE_NAMES[m])}</div>)}
-          {e.secondary.map((m) => <div key={m} className="dot-li sec muted">{tr(MUSCLE_NAMES[m])}</div>)}
+        <div className="muscle-map">
+          {(['f', 'b'] as const).map((side) => (
+            <img key={side} src={muscleUrl(e.id, side)} alt="" loading="lazy" onError={(ev) => ((ev.target as HTMLElement).style.visibility = 'hidden')} />
+          ))}
+        </div>
+        <div className="grow col" style={{ gap: 10, justifyContent: 'center' }}>
+          {tiers.map((x) => (
+            <div key={x.cls} className={`tier ${x.cls}`}>
+              <div className="tt">{x.title}</div>
+              <div className="tl">{names(x.list)}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -76,7 +98,7 @@ export function ExerciseDetail({ id }: { id: string }) {
   return (
     <div className="screen no-tabs flush">
       <div style={{ position: 'relative' }}>
-        <ExerciseViewer animId={e.anim} height="min(58dvh, 460px)" muscles={toRegions(e.primary)} secondary={toRegions(e.secondary)} />
+        <ExerciseViewer animId={e.anim} height="min(58dvh, 460px)" muscles={muscleSets(e)} />
         <div style={{ position: 'absolute', top: 'calc(var(--safe-t) + 10px)', left: 14, right: 14, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none' }}>
           <button className="glass-btn round" style={{ pointerEvents: 'auto' }} aria-label={t('common.back')} onClick={() => back()}><ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} /></button>
           <button className={`glass-btn round ${fav ? 'on' : ''}`} style={{ pointerEvents: 'auto' }} aria-pressed={fav} aria-label={t('ex.fav')} onClick={() => toggle(id)}><Heart size={19} fill={fav ? 'currentColor' : 'none'} /></button>

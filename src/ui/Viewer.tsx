@@ -16,8 +16,8 @@ const VIEWS = [
  * ракурсы, скорость 0.5×/1×/1.5×, пауза, перемотка, подсветка мышц.
  * Three.js подгружается отдельным чанком — список и дашборд от него не зависят.
  */
-export function ExerciseViewer({ animId, height = 380, muscles, secondary, compact, paused }: {
-  animId: string; height?: number | string; muscles?: Region[]; secondary?: Region[]; compact?: boolean; paused?: boolean;
+export function ExerciseViewer({ animId, height = 380, muscles, compact, paused }: {
+  animId: string; height?: number | string; muscles?: { primary: Region[]; secondary: Region[]; stabilizers: Region[] }; compact?: boolean; paused?: boolean;
 }) {
   const { t } = useT();
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -27,7 +27,7 @@ export function ExerciseViewer({ animId, height = 380, muscles, secondary, compa
   const [speed, setSpeed] = useState(1);
   const [phase, setPhase] = useState(0);
   const [view, setView] = useState<string | null>(null);
-  const [hi, setHi] = useState(false);
+  const [hi, setHi] = useState(true); // работающие мышцы подсвечены сразу
   const drag = useRef<{ x: number; y: number; id: number } | null>(null);
   const pinch = useRef(new Map<number, { x: number; y: number }>());
   const pinchDist = useRef(0);
@@ -82,13 +82,17 @@ export function ExerciseViewer({ animId, height = 380, muscles, secondary, compa
     st.setAnim(a);
     st.setPhase(0);
     setView(null);
-    st.setHighlight(hi && muscles ? muscles : null, secondary);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animId, status]);
 
   useEffect(() => { if (stage.current) stage.current.playing = playing && !paused; }, [playing, paused, status]);
   useEffect(() => { if (stage.current) stage.current.speed = speed; }, [speed, status]);
-  useEffect(() => { stage.current?.setHighlight(hi && muscles ? muscles : null, secondary); /* eslint-disable-next-line */ }, [hi, status]);
+  useEffect(() => {
+    if (status !== 'ready') return;
+    stage.current?.setHighlight(hi && muscles ? muscles.primary : null, muscles?.secondary, muscles?.stabilizers);
+    if (!stage.current?.playing) stage.current?.render();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hi, status, animId]);
 
   const onDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -148,7 +152,7 @@ export function ExerciseViewer({ animId, height = 380, muscles, secondary, compa
               </button>
             ))}
           </div>
-          {muscles?.length ? (
+          {muscles?.primary.length ? (
             <div className="side">
               <button className={`glass-btn ${hi ? 'on' : ''}`} aria-pressed={hi} aria-label={t('viewer.muscles')} onClick={() => setHi(!hi)}><Activity size={20} /></button>
             </div>

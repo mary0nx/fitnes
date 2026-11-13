@@ -15,10 +15,16 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { CENTER, SIDE, type BoneKey, type Pose, type V3 } from './pose';
 export type { BoneKey, Pose, V3 } from './pose';
 
+/** Имена костей: Mixamo (LeftUpLeg …) и 3ds Max Biped (Bip01_L_Thigh …). */
 const NAME: Record<string, string> = {
   hips: 'Hips', spine: 'Spine', spine1: 'Spine1', spine2: 'Spine2', neck: 'Neck', head: 'Head',
   shoulder: 'Shoulder', arm: 'Arm', forearm: 'ForeArm', hand: 'Hand',
   upLeg: 'UpLeg', leg: 'Leg', foot: 'Foot', toe: 'ToeBase',
+};
+const BIPED: Record<string, string> = {
+  hips: 'Pelvis', spine: 'Spine', spine1: 'Spine1', spine2: 'Spine2', neck: 'Neck', head: 'Head',
+  shoulder: 'Clavicle', arm: 'UpperArm', forearm: 'Forearm', hand: 'Hand',
+  upLeg: 'Thigh', leg: 'Calf', foot: 'Foot', toe: 'Toe0',
 };
 
 export const ALL_BONES: BoneKey[] = [
@@ -106,19 +112,37 @@ export class Rig {
     this.root.updateMatrixWorld(true);
 
     const byName = new Map<string, THREE.Bone>();
+    const meshes: THREE.SkinnedMesh[] = [];
     model.traverse((o) => {
-      if ((o as THREE.Bone).isBone) byName.set(o.name.replace(/^mixamorig:?/, ''), o as THREE.Bone);
+      if ((o as THREE.Bone).isBone) byName.set(o.name.replace(/^mixamorig:?/, '').replace(/^Bip01[_ ]?/, 'Bip:').replace(/ /g, '_'), o as THREE.Bone);
       const m = o as THREE.SkinnedMesh;
       if (m.isMesh) {
         m.castShadow = true;
         m.frustumCulled = false;
-        if (m.isSkinnedMesh) styleMesh(m);
+        if (m.isSkinnedMesh) meshes.push(m);
       }
     });
+    const biped = byName.has('Bip:Pelvis');
+    const find = (base: string, side: '' | 'L' | 'R'): THREE.Bone | undefined => (biped
+      ? byName.get(`Bip:${side ? `${side}_` : ''}${BIPED[base]}`)
+      : byName.get(`${side === 'L' ? 'Left' : side === 'R' ? 'Right' : ''}${NAME[base]}`));
+    const bones = new Map<BoneKey, THREE.Bone>();
+    for (const c of CENTER) { const b = find(c, ''); if (b) bones.set(c, b); }
+    for (const sb of SIDE) for (const side of ['L', 'R'] as const) { const b = find(sb, side); if (b) bones.set(`${sb}${side}` as BoneKey, b); }
 
-    const reg = (key: BoneKey, name: string) => {
-      const bone = byName.get(name);
-      if (!bone) return;
+    // зоны мышц считаются по суставам в исходной позе модели — до приведения к T-позе
+    const joints = {} as Record<BoneKey, THREE.Vector3>;
+    bones.forEach((b, k) => { joints[k] = b.getWorldPosition(new THREE.Vector3()); });
+    for (const m of meshes) styleMesh(m, joints);
+
+    if (biped) {
+      // у Biped бёдра висят на позвоночнике, а ключицы — на шее: переносим к тазу и груди
+      const re = (child: BoneKey, parent: BoneKey) => { const c = bones.get(child), p = bones.get(parent); if (c && p && c.parent !== p) p.attach(c); };
+      re('upLegL', 'hips'); re('upLegR', 'hips'); re('shoulderL', 'spine2'); re('shoulderR', 'spine2');
+    }
+    this.toTPose(bones, byName);
+
+    const reg = (key: BoneKey, bone: THREE.Bone) => {
       const parentBindWorld = bone.parent!.getWorldQuaternion(new THREE.Quaternion());
       this.info.set(key, {
         bone,
@@ -129,11 +153,7 @@ export class Rig {
       });
       this.radius.set(key, 0.06);
     };
-    for (const c of CENTER) reg(c, NAME[c]);
-    for (const sb of SIDE) {
-      reg(`${sb}L`, `Left${NAME[sb]}`);
-      reg(`${sb}R`, `Right${NAME[sb]}`);
-    }
+    bones.forEach((b, k) => reg(k, b));
     // высоты опорных суставов из T-позы
     for (const k of ['footL', 'footR', 'toeL', 'toeR'] as BoneKey[]) {
       const i = this.info.get(k);
@@ -148,10 +168,48 @@ export class Rig {
 
     byName.forEach((bone, name) => {
       const m = /^(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)([123])$/.exec(name);
-      if (!m) return;
+      const bp = /^Bip:([LR])_Finger(\d)(\d?)$/.exec(name);
+      if (!m && !bp) return;
       const p = bone.parent!.getWorldQuaternion(new THREE.Quaternion());
-      this.fingers.push({ bone, bindLocal: bone.quaternion.clone(), p, pInv: p.clone().invert(), left: m[1] === 'Left', thumb: m[2] === 'Thumb' });
+      this.fingers.push({
+        bone, bindLocal: bone.quaternion.clone(), p, pInv: p.clone().invert(),
+        left: m ? m[1] === 'Left' : bp![1] === 'L', thumb: m ? m[2] === 'Thumb' : bp![2] === '0',
+      });
     });
+  }
+
+  /**
+   * Приведение исходной позы к T-позе: руки в стороны, ноги вертикально.
+   * Позы упражнений описаны относительно T-позы, а модели бывают и в A-позе.
+   */
+  private toTPose(bones: Map<BoneKey, THREE.Bone>, byName: Map<string, THREE.Bone>) {
+    this.root.updateMatrixWorld(true);
+    const a = new THREE.Vector3(), b = new THREE.Vector3();
+    const align = (bone: THREE.Bone | undefined, child: THREE.Object3D | undefined, dir: THREE.Vector3) => {
+      if (!bone || !child) return;
+      bone.getWorldPosition(a); child.getWorldPosition(b);
+      const q = new THREE.Quaternion().setFromUnitVectors(b.sub(a).normalize(), dir);
+      const w = bone.getWorldQuaternion(new THREE.Quaternion()).premultiply(q);
+      bone.quaternion.copy(bone.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(w));
+      bone.updateWorldMatrix(false, true);
+    };
+    const down = new THREE.Vector3(0, -1, 0);
+    for (const side of ['L', 'R'] as const) {
+      const out = new THREE.Vector3(side === 'L' ? 1 : -1, 0, 0);
+      const foot = bones.get(`foot${side}`);
+      const footWorld = foot?.getWorldQuaternion(new THREE.Quaternion());
+      align(bones.get(`upLeg${side}`), bones.get(`leg${side}`), down);
+      align(bones.get(`leg${side}`), foot, down);
+      if (foot && footWorld) { // стопа остаётся плоско на полу, как была
+        foot.quaternion.copy(foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(footWorld));
+        foot.updateWorldMatrix(false, true);
+      }
+      align(bones.get(`arm${side}`), bones.get(`forearm${side}`), out);
+      align(bones.get(`forearm${side}`), bones.get(`hand${side}`), out);
+      const mid = byName.get(`Bip:${side}_Finger2`) ?? byName.get(`${side === 'L' ? 'Left' : 'Right'}HandMiddle1`);
+      align(bones.get(`hand${side}`), mid, out);
+    }
+    this.root.updateMatrixWorld(true);
   }
 
   bone(key: BoneKey): THREE.Bone | undefined { return this.info.get(key)?.bone; }
@@ -289,129 +347,199 @@ export class Rig {
   }
 }
 
-/* ---------- внешний вид модели ---------- */
-
-const LOOK = {
-  skin: new THREE.Color('#e9b596'),
-  outfit: new THREE.Color('#a56c9c'),
-  outfitDark: new THREE.Color('#8a5685'),
-  shoe: new THREE.Color('#fbf6fb'),
-  joint: 0.86,
-};
+/* ---------- внешний вид модели и подсветка мышц ---------- */
 
 export type Region =
-  | 'none' | 'glutes' | 'quads' | 'hamstrings' | 'calves' | 'abs' | 'obliques' | 'lowerBack'
+  | 'glutes' | 'quads' | 'hamstrings' | 'calves' | 'abs' | 'obliques' | 'lowerBack'
   | 'lats' | 'traps' | 'chest' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'adductors';
-const REGIONS: Region[] = ['none', 'glutes', 'quads', 'hamstrings', 'calves', 'abs', 'obliques', 'lowerBack',
-  'lats', 'traps', 'chest', 'shoulders', 'biceps', 'triceps', 'forearms', 'adductors'];
 
-interface Styled { base: Float32Array; region: Uint8Array }
-const styled = new Map<THREE.BufferGeometry, Styled>();
-const HI = new THREE.Color('#ff2f86');
-const HI2 = new THREE.Color('#ff9cc6');
-const DIM = new THREE.Color('#e8dcee');
+/** Цвета: тело-скульптура и три уровня задействованных мышц. */
+export const MUSCLE_COLORS = { body: '#aaa5b8', primary: '#f0397c', secondary: '#8f55e8', stabilizer: '#c9b0f5' };
+const C_BODY = new THREE.Color(MUSCLE_COLORS.body);
+const C_PRIMARY = new THREE.Color(MUSCLE_COLORS.primary);
+const C_SECONDARY = new THREE.Color(MUSCLE_COLORS.secondary);
+const C_STABILIZER = new THREE.Color(MUSCLE_COLORS.stabilizer);
+
+type P = THREE.Vector3;
+/** Мышечное «брюшко»: веретено от a к b, r — толщина в середине, taper — доля толщины на концах. */
+interface Capsule { a: P; b: P; r: number; taper: number }
+const MAX_CAPS = 26;
+
+interface MuscleUniforms {
+  uCA: { value: THREE.Vector4[] }; uCB: { value: THREE.Vector4[] }; uCC: { value: THREE.Vector4[] };
+  uCapN: { value: number }; uMirN: { value: THREE.Vector3 }; uMirC: { value: THREE.Vector3 }; uUnit: { value: number };
+}
+interface Styled { caps: { region: Region; c: Capsule }[]; uniforms: MuscleUniforms }
+const styled = new WeakMap<THREE.SkinnedMesh, Styled>();
 
 /**
- * Демо-модель — нейтральный манекен без текстур. Чтобы он выглядел как спортсменка
- * в форме, красим вершины по ведущей кости: легинсы, топ, кроссовки, кожа.
- * Заодно каждая вершина получает анатомическую зону — для подсветки работающих мышц.
- * Для модели с собственными текстурами (map) раскраска не применяется.
+ * Анатомическая карта: отдельные головки мышц как веретёна вдоль костей в исходной позе модели.
+ * Описана только левая половина тела — правая получается зеркалом в шейдере.
+ * Всё строится от положения суставов, поэтому подходит любой модели с человеческим скелетом.
  */
-function styleMesh(mesh: THREE.SkinnedMesh) {
-  const src = mesh.material as THREE.MeshStandardMaterial;
-  if (src.map) {
-    src.metalness = 0; src.roughness = 0.8; src.metalnessMap = null; src.roughnessMap = null;
-    src.needsUpdate = true;
-    return;
+function muscleCapsules(j: Record<BoneKey, P>): { region: Region; c: Capsule }[] {
+  const out: { region: Region; c: Capsule }[] = [];
+  if (!j.hips || !j.upLegL || !j.legL || !j.footL || !j.armL || !j.forearmL || !j.handL || !j.spine2) return out;
+  const k = (j.head?.y ?? 1.5) / 1.5; // масштаб под рост модели
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x * k, y * k, z * k);
+  const mix = (a: P, b: P, t: number) => a.clone().lerp(b, t);
+  const push = (region: Region, a: P, b: P, r: number, taper = 0.5) => out.push({ region, c: { a, b, r: r * k, taper } });
+  const hip = j.upLegL, knee = j.legL, ankle = j.footL, sh = j.armL, el = j.forearmL, wr = j.handL;
+  const pel = j.hips, mid = j.spine1 ?? j.spine2, top = j.spine2, neck = j.neck ?? j.spine2;
+  const cx = pel.x; // средняя линия тела
+  const at = (y: number, x: number, z: number) => new THREE.Vector3(cx + x * k, y, pel.z + z * k);
+
+  // бедро: три головки квадрицепса, две — бицепса бедра, приводящие
+  push('quads', mix(hip, knee, 0.08).add(v(0.004, 0, 0.056)), mix(hip, knee, 0.86).add(v(0, 0, 0.036)), 0.056, 0.4);
+  push('quads', mix(hip, knee, 0.16).add(v(0.05, 0, 0.022)), mix(hip, knee, 0.9).add(v(0.032, 0, 0.014)), 0.056, 0.42);
+  push('quads', mix(hip, knee, 0.42).add(v(-0.04, 0, 0.026)), mix(hip, knee, 0.93).add(v(-0.03, 0, 0.022)), 0.05, 0.45);
+  push('hamstrings', mix(hip, knee, 0.26).add(v(0.026, 0, -0.044)), mix(hip, knee, 0.93).add(v(0.022, 0, -0.026)), 0.054, 0.42);
+  push('hamstrings', mix(hip, knee, 0.26).add(v(-0.026, 0, -0.046)), mix(hip, knee, 0.93).add(v(-0.02, 0, -0.026)), 0.054, 0.42);
+  push('adductors', mix(hip, knee, 0.04).add(v(-0.058, 0, 0)), mix(hip, knee, 0.56).add(v(-0.042, 0, -0.004)), 0.05, 0.5);
+  // голень: две головки икроножной
+  push('calves', mix(knee, ankle, 0.04).add(v(0.022, 0, -0.03)), mix(knee, ankle, 0.52).add(v(0.012, 0, -0.018)), 0.046, 0.4);
+  push('calves', mix(knee, ankle, 0.04).add(v(-0.022, 0, -0.032)), mix(knee, ankle, 0.56).add(v(-0.012, 0, -0.02)), 0.048, 0.4);
+  // ягодицы: большая и средняя
+  push('glutes', hip.clone().add(v(-0.026, 0.06, -0.062)), hip.clone().add(v(-0.002, -0.05, -0.058)), 0.104, 0.74);
+  push('glutes', hip.clone().add(v(0.03, 0.105, -0.036)), hip.clone().add(v(0.05, 0.06, -0.02)), 0.056, 0.6);
+  // пресс: «кубики» в три ряда, косые
+  const y0 = pel.y + 0.03 * k, y1 = top.y - 0.055 * k, row = (y1 - y0) / 3;
+  for (let i = 0; i < 3; i++) {
+    push('abs', at(y0 + row * (i + 0.1), 0.036, 0.07), at(y0 + row * (i + 0.9), 0.036, 0.076), 0.046, 0.7);
   }
-  const geo = mesh.geometry;
-  const pos = geo.getAttribute('position');
-  const si = geo.getAttribute('skinIndex');
-  const sw = geo.getAttribute('skinWeight');
-  if (!si || !sw) return;
-  const material = new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.62, metalness: 0, sheen: 0.6, sheenRoughness: 0.5,
-    sheenColor: new THREE.Color('#ffd9ea'), clearcoat: 0.12, clearcoatRoughness: 0.6,
-  });
-  mesh.material = material;
-  if (styled.has(geo)) return;
-  const bones = mesh.skeleton.bones.map((b) => b.name.replace(/^mixamorig:?/, ''));
-  const bonePos = mesh.skeleton.bones.map((b) => b.getWorldPosition(new THREE.Vector3()));
-  const isJoint = /joint/i.test(src.name) || /joint/i.test(mesh.name);
-  mesh.updateMatrixWorld(true);
-  const colors = new Float32Array(pos.count * 3);
-  const region = new Uint8Array(pos.count);
-  const c = new THREE.Color();
-  const v = new THREE.Vector3();
-  const H = MODEL_HEIGHT;
-  for (let i = 0; i < pos.count; i++) {
-    let best = 0, bw = -1;
-    for (let k = 0; k < 4; k++) {
-      const w = sw.getComponent(i, k);
-      if (w > bw) { bw = w; best = si.getComponent(i, k); }
-    }
-    const name = bones[best] ?? '';
-    const bp = bonePos[best];
-    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
-    const y = v.y / H;
-    const front = v.z > (bp ? bp.z : 0);
-    let r: Region = 'none';
-    if (/Foot|Toe/.test(name)) c.copy(LOOK.shoe);
-    else if (/^Hips$|UpLeg|Leg/.test(name)) {
-      c.copy(y > 0.5 ? LOOK.outfitDark : LOOK.outfit);
-      if (name === 'Hips') r = front ? 'abs' : 'glutes';
-      else if (/UpLeg/.test(name)) {
-        const inner = Math.abs(v.x) < Math.abs(bp.x) - 0.035;
-        r = front ? (inner && y > 0.38 ? 'adductors' : 'quads') : (y > 0.47 ? 'glutes' : 'hamstrings');
-      } else r = front ? 'none' : 'calves';
-    } else if (/^Spine[12]$/.test(name) || /Shoulder/.test(name)) {
-      const strap = Math.abs(v.x) < 0.085;
-      c.copy(y < 0.805 || (strap && y < 0.83 && Math.abs(v.x) > 0.045) ? LOOK.outfit : LOOK.skin);
-      if (/Shoulder/.test(name)) r = Math.abs(v.x) > 0.11 ? 'shoulders' : 'traps';
-      else if (front) r = y > 0.73 ? 'chest' : 'abs';
-      else r = y > 0.8 ? 'traps' : 'lats';
-    } else if (name === 'Spine') {
-      c.copy(LOOK.skin);
-      r = Math.abs(v.x) > 0.09 ? 'obliques' : front ? 'abs' : 'lowerBack';
-    } else {
-      c.copy(LOOK.skin);
-      if (/(Left|Right)Arm$/.test(name)) r = Math.abs(v.x - bp.x) < 0.085 ? 'shoulders' : front ? 'biceps' : 'triceps';
-      else if (/ForeArm/.test(name)) r = 'forearms';
-    }
-    if (isJoint) c.multiplyScalar(LOOK.joint);
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-    region[i] = REGIONS.indexOf(r);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors.slice(), 3));
-  styled.set(geo, { base: colors, region });
+  push('obliques', pel.clone().add(v(0.1, 0.07, 0.03)), mid.clone().add(v(0.112, 0.05, 0.036)), 0.06, 0.5);
+  // спина
+  push('lowerBack', pel.clone().add(v(0.034, 0.07, -0.066)), mid.clone().add(v(0.04, 0.07, -0.08)), 0.052, 0.55);
+  push('lats', mid.clone().add(v(0.085, 0.01, -0.062)), sh.clone().add(v(-0.036, -0.09, -0.056)), 0.086, 0.45);
+  push('traps', neck.clone().add(v(0.026, 0, -0.036)), mix(neck, sh, 0.66).add(v(0, 0.018, -0.026)), 0.05, 0.5);
+  push('traps', top.clone().add(v(0.03, 0.11, -0.076)), top.clone().add(v(0.036, -0.02, -0.086)), 0.058, 0.55);
+  // грудь, плечо, рука
+  push('chest', sh.clone().add(v(-0.04, -0.05, 0.066)), sh.clone().add(v(-0.124, -0.086, 0.086)), 0.074, 0.74);
+  push('shoulders', sh.clone().add(v(0.012, 0.016, 0)), mix(sh, el, 0.34), 0.064, 0.62);
+  push('biceps', mix(sh, el, 0.28).add(v(0, 0, 0.026)), mix(sh, el, 0.93).add(v(0, 0, 0.018)), 0.046, 0.42);
+  push('triceps', mix(sh, el, 0.28).add(v(0, 0, -0.028)), mix(sh, el, 0.93).add(v(0, 0, -0.02)), 0.047, 0.46);
+  push('forearms', mix(el, wr, 0.02), mix(el, wr, 0.74), 0.05, 0.5);
+  return out;
 }
 
-/** Подсветка работающих мышц на модели (null — обычный вид). */
-export function highlightMuscles(model: THREE.Object3D, primary: Region[] | null, secondary: Region[] = []) {
+const V4 = () => Array.from({ length: MAX_CAPS }, () => new THREE.Vector4());
+
+/**
+ * Материал «скульптуры» + мышцы во фрагментном шейдере. Форма каждой мышцы считается
+ * по позиции точки в исходной позе, поэтому контуры гладкие при любой детализации сетки
+ * и остаются «приклеенными» к телу во время анимации. Те же формы дают рельеф (bump):
+ * слабый по всему телу и выраженный на подсвеченных мышцах.
+ */
+function styleMesh(mesh: THREE.SkinnedMesh, joints: Record<BoneKey, P>) {
+  const src = mesh.material as THREE.MeshStandardMaterial;
+  mesh.updateMatrixWorld(true);
+  const inv = mesh.matrixWorld.clone().invert();
+  const unit = new THREE.Vector3().setFromMatrixScale(mesh.matrixWorld).x; // локальные единицы → метры
+  const caps = muscleCapsules(joints);
+  for (const { c } of caps) { c.a.applyMatrix4(inv); c.b.applyMatrix4(inv); c.r /= unit; }
+  const mirC = new THREE.Vector3(joints.hips?.x ?? 0, joints.hips?.y ?? 1, joints.hips?.z ?? 0).applyMatrix4(inv);
+  const mirN = new THREE.Vector3(1, 0, 0).transformDirection(inv);
+  const uniforms: MuscleUniforms = {
+    uCA: { value: V4() }, uCB: { value: V4() }, uCC: { value: V4() }, uCapN: { value: 0 },
+    uMirN: { value: mirN }, uMirC: { value: mirC }, uUnit: { value: unit },
+  };
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: src.map ? 0xffffff : C_BODY, map: src.map ?? null, roughness: 0.52, metalness: 0,
+    sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color('#e9defa'), clearcoat: 0.2, clearcoatRoughness: 0.5,
+  });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBind;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vBind;
+uniform vec4 uCA[${MAX_CAPS}]; // a.xyz, радиус
+uniform vec4 uCB[${MAX_CAPS}]; // b.xyz, сужение к концам
+uniform vec4 uCC[${MAX_CAPS}]; // цвет, сила подсветки
+uniform int uCapN;
+uniform vec3 uMirN;
+uniform vec3 uMirC;
+uniform float uUnit;
+float muscleH = 0.0;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  // зеркалим правую половину тела на левую
+  vec3 mp = vBind - 2.0 * min(0.0, dot(vBind - uMirC, uMirN)) * uMirN;
+  float best = 0.0;      // «уровень + выпуклость» лучшей мышцы в точке
+  vec3 bestCol = vec3(0.0);
+  float bestDome = 0.0;
+  float bestFiber = 0.0;
+  float cover = 0.0;
+  for (int i = 0; i < ${MAX_CAPS}; i++) {
+    if (i >= uCapN) break;
+    vec3 a = uCA[i].xyz;
+    vec3 ab = uCB[i].xyz - a;
+    vec3 ap = mp - a;
+    float t = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+    vec3 radial = ap - ab * t;
+    float rad = uCA[i].w * mix(uCB[i].w, 1.0, pow(sin(3.14159265 * t), 0.6));
+    float d = length(radial) / rad;
+    float dome = clamp(1.0 - d * d, 0.0, 1.0);
+    float tier = uCC[i].a;
+    float al = step(0.5, tier);
+    float w = (1.0 - smoothstep(0.88, 1.0, d)) * al;
+    vec3 sd = normalize(cross(normalize(ab), vec3(0.31, 0.2, 0.93)));
+    float fiber = sin(dot(radial, sd) / rad * 30.0);
+    float score = (tier + dome) * step(0.001, w);
+    if (score > best) { best = score; bestCol = uCC[i].rgb; bestDome = dome; bestFiber = fiber; }
+    cover = max(cover, w);
+    muscleH = max(muscleH, (dome * mix(0.1, 0.26, al) + al * dome * fiber * 0.006) * rad * uUnit);
+  }
+  // к границе головки цвет темнеет — так читаются отдельные пучки мышцы
+  vec3 col = bestCol * (0.7 + 0.36 * smoothstep(0.0, 0.6, bestDome)) * (1.0 + 0.045 * bestFiber);
+  diffuseColor.rgb = mix(diffuseColor.rgb, col, cover);
+}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+{
+  // рельеф: наклоняем нормаль по градиенту высоты мышц
+  vec3 dpdx = dFdx(-vViewPosition);
+  vec3 dpdy = dFdy(-vViewPosition);
+  vec3 r1 = cross(dpdy, normal);
+  vec3 r2 = cross(normal, dpdx);
+  float det = dot(dpdx, r1);
+  if (abs(det) > 1e-14) {
+    vec3 grad = (dFdx(muscleH) * r1 + dFdy(muscleH) * r2) / det;
+    float gl = length(grad);
+    if (gl > 1.2) grad *= 1.2 / gl;
+    normal = normalize(normal - grad);
+  }
+}`);
+  };
+  mesh.material = mat;
+  const st: Styled = { caps, uniforms };
+  styled.set(mesh, st);
+  applyMuscles(st, null, [], []);
+}
+
+function applyMuscles(st: Styled, primary: Region[] | null, secondary: Region[], stabilizers: Region[]) {
+  const tier = (r: Region) => (!primary ? 0 : primary.includes(r) ? 3 : secondary.includes(r) ? 2 : stabilizers.includes(r) ? 1 : 0);
+  const cols = [C_BODY, C_STABILIZER, C_SECONDARY, C_PRIMARY];
+  // порядок важен: основные мышцы рисуются поверх остальных
+  const list = st.caps.map((x) => ({ ...x, tier: tier(x.region) })).sort((a, b) => a.tier - b.tier).slice(-MAX_CAPS);
+  const u = st.uniforms;
+  list.forEach(({ c, tier: t }, i) => {
+    u.uCA.value[i].set(c.a.x, c.a.y, c.a.z, c.r);
+    u.uCB.value[i].set(c.b.x, c.b.y, c.b.z, c.taper);
+    u.uCC.value[i].set(cols[t].r, cols[t].g, cols[t].b, t);
+  });
+  u.uCapN.value = list.length;
+}
+
+/**
+ * Подсветка задействованных мышц прямо на модели: основные, дополнительные, стабилизаторы.
+ * null — обычный вид без подсветки (остаётся только лёгкий рельеф).
+ */
+export function highlightMuscles(model: THREE.Object3D, primary: Region[] | null, secondary: Region[] = [], stabilizers: Region[] = []) {
   model.traverse((o) => {
     const m = o as THREE.SkinnedMesh;
-    if (!m.isSkinnedMesh) return;
-    const st = styled.get(m.geometry);
-    if (!st) return;
-    const attr = m.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const arr = attr.array as Float32Array;
-    if (!primary) arr.set(st.base);
-    else {
-      const p = new Set(primary.map((r) => REGIONS.indexOf(r)));
-      const s = new Set(secondary.map((r) => REGIONS.indexOf(r)));
-      for (let i = 0; i < st.region.length; i++) {
-        const r = st.region[i];
-        const col = p.has(r) ? HI : s.has(r) ? HI2 : null;
-        const j = i * 3;
-        if (col) { arr[j] = col.r; arr[j + 1] = col.g; arr[j + 2] = col.b; }
-        else {
-          // остальное тело — приглушённое, чтобы подсветка читалась
-          arr[j] = st.base[j] * 0.35 + DIM.r * 0.65;
-          arr[j + 1] = st.base[j + 1] * 0.35 + DIM.g * 0.65;
-          arr[j + 2] = st.base[j + 2] * 0.35 + DIM.b * 0.65;
-        }
-      }
-    }
-    attr.needsUpdate = true;
+    const st = m.isSkinnedMesh ? styled.get(m) : undefined;
+    if (st) applyMuscles(st, primary, secondary, stabilizers);
   });
 }

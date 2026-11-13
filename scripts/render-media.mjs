@@ -19,10 +19,12 @@ const webp = { type: 'image/webp' };
 
 const list = await page.evaluate(() => window.__list);
 for (const e of list) {
-  save(`media/thumbs/${e.id}.webp`, await R(e.anim, e.thumb, { w: 480, h: 480, ...webp }));
-  save(`media/muscles/${e.id}.webp`, await R('stand', 0, {
-    w: 300, h: 420, az: e.back ? 158 : 22, el: 6, zoom: 1.12, hi: e.primary.length ? e.primary : ['none'], hi2: e.secondary, ...webp,
-  }));
+  const hi = { hi: e.primary.length ? e.primary : null, hi2: e.secondary, hi3: e.stab };
+  save(`media/thumbs/${e.id}.webp`, await R(e.anim, e.thumb, { w: 480, h: 480, ...hi, ...webp }));
+  // карта мышц: вид спереди и сзади
+  for (const [side, az] of [['f', 0], ['b', 180]]) {
+    save(`media/muscles/${e.id}-${side}.webp`, await R('stand', 0, { w: 250, h: 450, az, el: 4, zoom: 2.0, ...hi, ...webp }));
+  }
   process.stdout.write('.');
 }
 save('media/hero.webp', await R('hero', 0.25, { w: 900, h: 1350, az: 22, el: 3, zoom: 1.5, ...webp }));

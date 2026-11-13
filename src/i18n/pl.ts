@@ -87,6 +87,7 @@ export const pl: Record<keyof typeof ru, string> = {
   'edit.delete': 'Usunąć trening?', 'edit.delete.d': 'Zniknie z grafiku. Historia treningów zostanie zachowana.',
   'edit.planUpdated': 'Plan zaktualizowany',
 
+  'ex.m.primary': 'Mięśnie główne', 'ex.m.secondary': 'Mięśnie pomocnicze', 'ex.m.stab': 'Stabilizatory',
   'ex.muscles': 'Pracujące mięśnie', 'ex.technique': 'Technika wykonania', 'ex.mistakes': 'Częste błędy',
   'ex.alternatives': 'Czym zastąpić', 'ex.fav': 'Do ulubionych', 'ex.myResults': 'Moje wyniki', 'ex.best': 'Rekord',
   'ex.disclaimer': 'Demonstracyjna animacja 3D pokazuje ogólny wzorzec ruchu i nie zastępuje pracy z trenerem. Przy bólu lub dyskomforcie przerwij ćwiczenie.',
@@ -158,7 +159,7 @@ export const pl: Record<keyof typeof ru, string> = {
   'about.text': 'Women’s Fitness to osobista trenerka w telefonie: program pod twój cel, demonstracja ćwiczeń w 3D, dziennik treningowy, dieta i postępy.',
   'about.health': 'Aplikacja nie jest wyrobem medycznym. Przed rozpoczęciem treningów, w ciąży, przy urazach i chorobach przewlekłych skonsultuj się z lekarzem.',
   'about.privacy': 'Wszystkie dane są przechowywane wyłącznie na tym urządzeniu. Konto i serwer nie są używane.',
-  'about.model': 'Demonstracja 3D: neutralny manekin i animacje proceduralne (nie motion capture).',
+  'about.model': 'Model 3D: Microsoft Rocketbox (licencja MIT). Animacje proceduralne, nie motion capture.',
 
   'set.title': 'Ustawienia', 'set.lang': 'Język', 'set.theme': 'Motyw', 'set.theme.light': 'Jasny', 'set.theme.dark': 'Ciemny', 'set.theme.auto': 'Auto',
   'set.units': 'Jednostki wagi', 'set.units.kg': 'Kilogramy', 'set.units.lb': 'Funty',

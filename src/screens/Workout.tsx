@@ -11,7 +11,7 @@ import { nav } from '../router';
 import { useStore } from '../store';
 import { Confirm, Ring, Seg, Sheet, Stepper, Thumb, toast } from '../ui/basic';
 import { ExerciseViewer } from '../ui/Viewer';
-import { MistakesCard, MusclesCard, TechniqueCard, toRegions } from './ExerciseDetail';
+import { MistakesCard, MusclesCard, TechniqueCard, muscleSets } from './ExerciseDetail';
 
 const mmss = (s: number) => `${String(Math.floor(Math.max(0, s) / 60)).padStart(2, '0')}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 
@@ -176,7 +176,7 @@ export function Workout() {
         <button className={`icon-btn ${fav ? 'on' : ''}`} aria-pressed={fav} aria-label={t('ex.fav')} onClick={() => toggleFavorite(e.id)}><Heart size={19} fill={fav ? 'currentColor' : 'none'} /></button>
       </div>
 
-      <ExerciseViewer animId={e.anim} height="min(40dvh, 340px)" muscles={toRegions(e.primary)} secondary={toRegions(e.secondary)} compact paused={paused || !!rest} />
+      <ExerciseViewer animId={e.anim} height="min(40dvh, 340px)" muscles={muscleSets(e)} compact paused={paused || !!rest} />
 
       <div className="wk-body">
         <Seg value={tab} onChange={setTab} options={[{ value: 'sets', label: t('wk.sets') }, { value: 'tech', label: t('wk.tech') }, { value: 'muscles', label: t('wk.muscles') }]} />
