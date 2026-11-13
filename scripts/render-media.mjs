@@ -25,8 +25,8 @@ for (const e of list) {
   }));
   process.stdout.write('.');
 }
-save('media/hero.webp', await R('hero', 0.25, { w: 900, h: 1350, az: 22, el: 3, zoom: 1.05, ...webp }));
-save('media/stand.webp', await R('stand', 0, { w: 360, h: 800, az: 0, el: 3, zoom: 1.02, ...webp }));
+save('media/hero.webp', await R('hero', 0.25, { w: 900, h: 1350, az: 22, el: 3, zoom: 1.5, ...webp }));
+save('media/stand.webp', await R('stand', 0, { w: 360, h: 800, az: 0, el: 3, zoom: 2.05, ...webp }));
 const iconModel = await R('hero', 0.25, { w: 512, h: 512, az: 22, el: 3, zoom: 1.9, type: 'image/png' });
 
 // иконки приложения

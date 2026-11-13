@@ -154,14 +154,14 @@ export function Workout() {
     const s = finishWorkout();
     nav(s ? `/done/${s.id}` : '/', true);
   };
-  const onFinish = () => (done < total ? setFinishAsk(true) : doFinish());
+  const onFinish = () => (done > 0 && done < total ? setFinishAsk(true) : doFinish());
 
   return (
     <div className="screen flush no-tabs" style={{ animation: 'none' }}>
       <div className="wk-top">
         <button className="icon-btn" aria-label={t('common.back')} onClick={() => setPaused(true)}><ChevronLeft size={22} /></button>
         <div className="wk-progress">
-          <div className="t"><span className="ellipsis">{tr(active.name)} · {t('wk.exN', { n: idx + 1, m: active.exercises.length })}</span><span className="num">{pct}%</span></div>
+          <div className="t"><span className="ellipsis">{tr(active.name)}</span><span className="num">{pct}%</span></div>
           <div className="segbar">
             {active.exercises.map((x, i) => <i key={i} className={x.sets.every((s) => s.done) ? 'done' : i === idx ? 'cur' : ''} />)}
           </div>
@@ -169,7 +169,10 @@ export function Workout() {
         <span className="badge lav num" aria-label={t('wk.time')}><Timer size={13} />{mmss(elapsed)}</span>
       </div>
       <div className="wk-title">
-        <h1>{tr(e.name)}</h1>
+        <div className="grow">
+          <div className="tiny muted bold" style={{ textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 2 }}>{t('wk.exN', { n: idx + 1, m: active.exercises.length })}</div>
+          <h1>{tr(e.name)}</h1>
+        </div>
         <button className={`icon-btn ${fav ? 'on' : ''}`} aria-pressed={fav} aria-label={t('ex.fav')} onClick={() => toggleFavorite(e.id)}><Heart size={19} fill={fav ? 'currentColor' : 'none'} /></button>
       </div>
 
@@ -187,7 +190,7 @@ export function Workout() {
               ) : (
                 <>
                   <div><div className="stat-label">{e.kind === 'cardio' ? t('wk.minutes') : e.kind === 'time' ? t('wk.seconds') : t('wk.reps')}</div><div className="v num">{curSet.reps}</div></div>
-                  <div><div className="stat-label">{e.kind === 'strength' ? t('wk.weight') : t('wk.rest')}</div><div className="v num">{e.kind === 'strength' ? <>{showW(curSet.weight)} <small>{u}</small></> : <>{ex.restSec} <small>{t('unit.sec')}</small></>}</div></div>
+                  <div><div className="stat-label">{e.kind === 'strength' ? t('wk.weight') : t('wk.rest')}</div><div className="v num">{e.kind === 'strength' ? <>{showW(curSet.weight)} <small>{u}</small></> : ex.restSec > 0 ? <>{ex.restSec} <small>{t('unit.sec')}</small></> : '—'}</div></div>
                 </>
               )}
             </div>
@@ -253,7 +256,7 @@ export function Workout() {
       </div>
 
       {rest ? (
-        <div className="rest" role="dialog" aria-label={t('rest.title')}>
+        <div className="rest-screen" role="dialog" aria-label={t('rest.title')}>
           <h2>{t('rest.title')}</h2>
           <Ring value={(restPause ?? restLeft) / Math.max(1, rest.total)} size={230} stroke={12} track="rgba(255,255,255,.16)">
             <div>

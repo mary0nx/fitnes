@@ -99,7 +99,7 @@ export const ru = {
   'viewer.restart': 'Сначала', 'viewer.speed': 'Скорость', 'viewer.timeline': 'Перемотка',
 
   // режим тренировки
-  'wk.exN': 'упражнение {n} из {m}', 'wk.time': 'Время тренировки',
+  'wk.exN': 'Упражнение {n} из {m}', 'wk.time': 'Время тренировки',
   'wk.sets': 'Подходы', 'wk.tech': 'Техника', 'wk.muscles': 'Мышцы',
   'wk.curSet': 'Текущий подход', 'wk.of': 'из', 'wk.reps': 'Повторения', 'wk.weight': 'Вес', 'wk.rest': 'Отдых',
   'wk.seconds': 'Секунды', 'wk.minutes': 'Минуты', 'wk.left': 'Осталось',

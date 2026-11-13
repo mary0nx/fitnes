@@ -94,7 +94,7 @@ export const pl: Record<keyof typeof ru, string> = {
   'viewer.aria': 'Demonstracja ćwiczenia 3D', 'viewer.muscles': 'Pokaż pracujące mięśnie', 'viewer.play': 'Odtwórz',
   'viewer.restart': 'Od początku', 'viewer.speed': 'Prędkość', 'viewer.timeline': 'Przewijanie',
 
-  'wk.exN': 'ćwiczenie {n} z {m}', 'wk.time': 'Czas treningu',
+  'wk.exN': 'Ćwiczenie {n} z {m}', 'wk.time': 'Czas treningu',
   'wk.sets': 'Serie', 'wk.tech': 'Technika', 'wk.muscles': 'Mięśnie',
   'wk.curSet': 'Bieżąca seria', 'wk.of': 'z', 'wk.reps': 'Powtórzenia', 'wk.weight': 'Ciężar', 'wk.rest': 'Przerwa',
   'wk.seconds': 'Sekundy', 'wk.minutes': 'Minuty', 'wk.left': 'Zostało',

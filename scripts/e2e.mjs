@@ -1,0 +1,208 @@
+// Сквозной тест основных сценариев в мобильном окне.
+// Запуск: `npm run dev` (или `npm run preview`) и `npm run e2e`. URL=… — адрес, SHOTS=dir — сохранять скриншоты.
+import { createRequire } from 'node:module';
+import { mkdirSync } from 'node:fs';
+const { chromium } = createRequire(import.meta.url)('playwright');
+
+const url = process.env.URL || 'http://localhost:5173/';
+const shots = process.env.SHOTS;
+if (shots) mkdirSync(shots, { recursive: true });
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: Number(process.env.DPR || 1), hasTouch: true, isMobile: true, locale: 'ru-RU' });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+page.on('console', (m) => { if (m.type() === 'error' && !/favicon|manifest|sw\.js/.test(m.text())) errors.push(m.text()); });
+
+let n = 0, failed = 0;
+const shot = async (name, full = false) => { if (shots) await page.waitForTimeout(450); if (shots) await page.screenshot({ path: `${shots}/${String(++n).padStart(2, '0')}-${name}.png`, fullPage: full }); };
+const ok = (cond, msg) => { if (cond) console.log('  ✓', msg); else { failed++; console.log('  ✗', msg); } };
+const step = (s) => console.log(`\n${s}`);
+const click = (text, opts = {}) => page.getByRole('button', { name: text, ...opts }).first().click();
+const tab = (text) => page.getByRole('tab', { name: text, exact: true }).first().click();
+const state = () => page.evaluate(() => JSON.parse(localStorage.getItem('wf-data-v1') || '{}').state || {});
+const wait = (ms) => page.waitForTimeout(ms);
+
+step('1. Первый запуск и онбординг');
+await page.goto(url);
+await page.getByText('Твоя новая форма начинается здесь').waitFor();
+await wait(600); await shot('welcome');
+await click('Начать');
+await page.getByPlaceholder('Имя').fill('Мария'); await shot('name');
+await click('Далее');
+await click('Похудеть'); await shot('goal'); await click('Далее');
+await page.getByText('Сколько тебе лет?').waitFor(); await wait(300); await shot('age'); await click('Далее');
+await page.getByText('Какой у тебя рост?').waitFor(); await shot('height'); await click('Далее');
+await page.getByLabel('Сколько ты весишь?').fill('58'); await shot('weight'); await click('Далее');
+await page.getByLabel('Какого результата хочешь достичь?').fill('54'); await shot('target'); await click('Далее');
+await click('Новичок'); await shot('level'); await click('Далее');
+await click('Спортзал'); await shot('place'); await click('Далее');
+await shot('limits'); await click('Далее');
+await click('4 раза в неделю'); await shot('frequency');
+await click('Создать план');
+await wait(900); await shot('generating');
+await page.getByText('Привет, Мария!').waitFor({ timeout: 15000 });
+await wait(800); await shot('home', true);
+let s = await state();
+ok(s.profile?.name === 'Мария' && s.profile.weightKg === 58 && s.profile.targetKg === 54, 'профиль сохранён (58 → 54 кг)');
+ok(s.plan && s.plan.week.filter(Boolean).length >= 4, `план создан: ${s.plan?.week.map((x) => x || '—').join(', ')}`);
+ok(Object.values(s.plan.workouts).every((w) => w.items.length >= 4), 'в каждой тренировке есть упражнения');
+
+step('2. Повторный запуск — без онбординга');
+await page.reload();
+await page.getByText('Привет, Мария!').waitFor();
+ok(true, 'после перезагрузки сразу главный экран');
+
+step('3. Календарь и каталог');
+await click('Тренировки'); await wait(500); await shot('train-week', true);
+await tab('Месяц'); await wait(300); await shot('train-month', true);
+await tab('Список'); await wait(300); await shot('train-list', true);
+await tab('Каталог'); await wait(600); await shot('catalog');
+ok(await page.getByText('Приседания со штангой').count() > 0, 'каталог показывает упражнения');
+await page.getByPlaceholder('Поиск упражнения').fill('планк');
+ok(await page.getByText('Планка').count() > 0 && await page.getByText('Жим ногами').count() === 0, 'поиск по каталогу работает');
+await page.getByPlaceholder('Поиск упражнения').fill('');
+await page.getByText('Приседания со штангой').first().click();
+await page.locator('.viewer canvas').waitFor();
+await page.locator('.play-btn').waitFor({ timeout: 30000 });
+await wait(1500); await shot('exercise');
+ok(await page.locator('.viewer .views button').count() === 3, '3D-вьюер загрузился: ракурсы, скорость, пауза');
+await page.getByRole('button', { name: 'Сбоку' }).click(); await wait(400);
+await page.getByRole('button', { name: 'Показать работающие мышцы' }).click(); await wait(600); await shot('exercise-muscles');
+await page.getByRole('button', { name: 'Скорость' }).click();
+ok((await page.getByRole('button', { name: 'Скорость' }).innerText()).includes('1.5'), 'скорость переключается на 1.5×');
+await page.getByRole('button', { name: 'Пауза' }).click();
+ok(await page.getByRole('button', { name: 'Воспроизвести' }).count() === 1, 'пауза анимации работает');
+await page.evaluate(() => window.scrollTo(0, 600)); await wait(300); await shot('exercise-info');
+
+step('4. Запуск тренировки');
+const legsDay = s.plan.week.findIndex((x) => x === 'legs');
+const d = new Date(); const diff = (legsDay - ((d.getDay() + 6) % 7) + 7) % 7; d.setDate(d.getDate() + diff);
+const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+await page.goto(`${url}#/day/${iso}`); await page.getByText('Ноги и ягодицы').first().waitFor();
+await wait(500); await shot('day', true);
+await click('Начать тренировку');
+await page.locator('.wk-title h1').waitFor();
+await page.locator('.play-btn').waitFor({ timeout: 30000 });
+await wait(800); await shot('workout-warmup', true);
+ok((await state()).active?.exercises.length >= 5, 'активная тренировка создана и сохранена');
+await click('Далее', { exact: true });
+await wait(1200);
+const exName = await page.locator('.wk-title h1').innerText();
+await shot('workout-strength', true);
+ok(await page.locator('.set-row').count() === 3, `упражнение «${exName}»: 3 подхода`);
+
+step('5. Подходы, вес, таймер отдыха');
+const w0 = (await state()).active.exercises[1].sets[0].weight;
+await page.getByRole('button', { name: 'Вес 1 +' }).click();
+const w1 = (await state()).active.exercises[1].sets[0].weight;
+ok(w1 === w0 + 2.5, `вес изменён и сохранён: ${w0} → ${w1} кг`);
+await page.getByRole('button', { name: 'Отметить подход 1' }).click();
+await page.getByRole('dialog', { name: 'Отдых' }).waitFor();
+await wait(700); await shot('rest');
+const t0 = await page.locator('.rest-screen .time').innerText();
+await page.getByRole('button', { name: '+30 сек' }).click(); await wait(400);
+const t1 = await page.locator('.rest-screen .time').innerText();
+const sec = (x) => Number(x.split(':')[0]) * 60 + Number(x.split(':')[1]);
+ok(sec(t1) - sec(t0) >= 28, `таймер отдыха: ${t0} → ${t1} после «+30 сек»`);
+await click('Пропустить отдых');
+ok((await state()).active.exercises[1].sets[0].done === true, 'подход отмечен выполненным');
+await click('Добавить подход');
+ok(await page.locator('.set-row').count() === 4, 'подход добавлен (4)');
+await page.getByRole('button', { name: 'Удалить подход 4' }).click();
+ok(await page.locator('.set-row').count() === 3, 'подход удалён (3)');
+
+step('6. Замена упражнения');
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await click('Заменить');
+await page.getByText('Выбери альтернативу:').waitFor(); await wait(400); await shot('replace');
+await page.locator('.sheet .opt').first().click();
+await page.locator('.sheet').getByRole('button', { name: 'Заменить' }).click();
+await wait(600);
+const exName2 = await page.locator('.wk-title h1').innerText();
+const a = (await state()).active;
+ok(exName2 !== exName && a.exercises[1].replacedFrom, `замена: «${exName}» → «${exName2}», сохранена в тренировке`);
+
+step('7. Незавершённая тренировка переживает закрытие');
+await page.reload();
+await page.locator('.wk-title h1').waitFor();
+ok((await page.locator('.wk-title h1').innerText()) === exName2, 'после перезагрузки открыто то же упражнение');
+await page.goto(`${url}#/`); await page.getByText('Продолжить тренировку').waitFor();
+ok(true, 'на главной есть карточка «Продолжить тренировку»');
+await page.getByText('Продолжить тренировку').click();
+await page.locator('.wk-title h1').waitFor();
+
+step('8. Завершение тренировки');
+for (let i = 1; i <= 3; i++) {
+  const b = page.getByRole('button', { name: `Отметить подход ${i}` });
+  if ((await b.getAttribute('aria-pressed')) === 'true') continue;
+  await b.click(); await wait(300);
+  if (await page.getByRole('dialog', { name: 'Отдых' }).count()) await click('Пропустить отдых');
+  await wait(300);
+}
+await wait(400);
+await page.evaluate(() => window.scrollTo(0, 0)); await wait(200);
+await page.locator('.wk-bar').getByRole('button', { name: 'Пауза' }).click(); await page.getByText('Выполнено подходов').waitFor(); await wait(300); await shot('pause');
+await page.locator('.sheet').getByRole('button', { name: 'Завершить тренировку' }).click();
+await page.getByText('Завершить досрочно?').waitFor();
+await page.locator('.sheet').getByRole('button', { name: 'Завершить тренировку' }).click();
+await page.getByText('Тренировка завершена!').waitFor();
+await wait(900); await shot('done');
+s = await state();
+ok(s.history.length === 1 && !s.active, 'тренировка в истории, активной больше нет');
+ok(s.history[0].exercises[1].sets.filter((x) => x.done).length === 3, 'выполненные подходы записаны в историю');
+ok(s.history[0].kcal > 0, `расход посчитан: ${s.history[0].kcal} ккал`);
+await click('Отлично!');
+await page.getByText('Привет, Мария!').waitFor(); await wait(600); await shot('home-after', true);
+
+step('9. Прогресс и история');
+await click('Прогресс'); await wait(600);
+await click('Записать вес');
+await page.locator('.sheet').getByRole('button', { name: 'Вес −' }).click();
+await page.locator('.sheet').getByRole('button', { name: 'Сохранить' }).click();
+await wait(500); await shot('progress', true);
+s = await state();
+ok(s.weights.length === 1 && Math.abs(s.profile.weightKg - 57.9) < 0.01, `вес записан: ${s.profile.weightKg} кг`);
+await page.goto(`${url}#/train/history`); await page.getByText('Ноги и ягодицы').first().waitFor(); await shot('history');
+await page.getByText('Ноги и ягодицы').first().click(); await wait(500); await shot('session', true);
+ok(await page.locator('.badge.lav').count() > 0, 'детали прошедшей тренировки показывают подходы');
+
+step('10. Предыдущий вес подставляется в следующей тренировке');
+await page.goto(`${url}#/day/${iso}`); await click('Начать тренировку');
+await page.locator('.wk-title h1').waitFor();
+s = await state();
+const again = s.active.exercises.find((x) => x.exerciseId === s.history[0].exercises[1].exerciseId) ?? s.active.exercises[1];
+ok(s.history.length === 1, 'история не перезаписана новой тренировкой');
+ok(again.exerciseId !== s.history[0].exercises[1].exerciseId || again.sets[0].weight === s.history[0].exercises[1].sets[0].weight, 'подставлен прошлый рабочий вес');
+await page.locator('.wk-bar').getByRole('button', { name: 'Пауза' }).click(); await page.locator('.sheet').getByRole('button', { name: 'Завершить тренировку' }).click(); await wait(500);
+ok(!(await state()).active && (await state()).history.length === 1, 'пустая тренировка не сохраняется в историю');
+
+step('11. Питание');
+await page.goto(`${url}#/nutrition`); await page.getByText('Завтрак').waitFor();
+await page.getByText('Завтрак').click();
+await click('Добавить продукт');
+await page.getByPlaceholder('Поиск продукта').fill('овсян');
+await page.getByText('Овсяная каша на воде').click();
+await wait(300); await shot('food');
+await page.locator('.sheet').getByRole('button', { name: /Добавить в/ }).click();
+await wait(300);
+await page.getByRole('button', { name: 'Закрыть' }).click(); await wait(300);
+await click('250 мл');
+await wait(600); await shot('nutrition', true);
+s = await state();
+const day = Object.values(s.days)[0];
+ok(day.meals.breakfast.length === 1 && day.waterMl === 250, 'продукт и вода сохранены');
+
+step('12. Профиль, настройки, язык, тема');
+await page.goto(`${url}#/profile`); await wait(500); await shot('profile', true);
+await page.goto(`${url}#/settings`); await page.getByText('Polski').click(); await wait(300);
+ok(await page.getByText('Ustawienia').count() > 0, 'польская локализация включается');
+await page.getByText('Ciemny').click(); await wait(400); await shot('settings-pl-dark', true);
+ok(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'тёмная тема включается');
+await page.goto(`${url}#/`); await wait(600); await shot('home-pl-dark', true);
+await page.goto(`${url}#/settings`); await page.getByText('Русский').click(); await page.getByText('Светлая').click();
+await page.goto(`${url}#/install`); await wait(300); await shot('install');
+
+console.log(`\n${failed ? `ПРОВАЛЕНО: ${failed}` : 'Все проверки пройдены'}${errors.length ? `\nОшибки в консоли:\n - ${[...new Set(errors)].join('\n - ')}` : '\nОшибок в консоли нет'}`);
+await browser.close();
+process.exit(failed || errors.length ? 1 : 0);

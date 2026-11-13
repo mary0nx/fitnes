@@ -73,7 +73,7 @@ export function Onboarding() {
         <div className="content">
           <h1>{t('ob.welcome.title')}</h1>
           <p>{t('ob.welcome.text')}</p>
-          <div className="row" style={{ gap: 8 }}>
+          <div className="lang-seg">
             <Seg value={lang} onChange={(v) => setSettings({ lang: v })} options={[{ value: 'ru', label: 'Русский' }, { value: 'pl', label: 'Polski' }]} />
           </div>
           <button className="btn primary block" onClick={next}>{t('common.start')} <ArrowRight size={20} /></button>

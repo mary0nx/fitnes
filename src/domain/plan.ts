@@ -113,7 +113,7 @@ function buildWorkout(type: WorkoutType, p: Profile): WorkoutTemplate {
     items.push(item('stretch_forward', goal, level));
   } else if (type !== 'custom') {
     items.push(item(warm, goal, level, { reps: 5 }));
-    const n = level + 3; // 4 / 5 / 6 основных упражнений
+    const n = Math.min(6, level + 4); // 5 / 6 / 6 основных упражнений
     for (const slot of SLOTS[type].slice(0, n)) {
       const id = take(slot);
       if (id) items.push(item(id, goal, level));
@@ -186,14 +186,14 @@ export function nextWorkoutDate(plan: Plan, from: string, skip: (d: string) => b
 
 /** чистая длительность одного подхода, сек */
 const setSeconds = (e: Exercise, reps: number) =>
-  e.kind === 'cardio' ? reps * 60 : e.kind === 'time' ? reps : Math.max(25, reps * 3.2);
+  e.kind === 'cardio' ? reps * 60 : e.kind === 'time' ? reps : Math.max(35, reps * 3.5);
 
 export function estimateMinutes(items: PlanItem[]): number {
   let s = 0;
   for (const it of items) {
     const e = EX_BY_ID[it.exerciseId];
     if (!e) continue;
-    s += it.sets * setSeconds(e, it.reps) + Math.max(0, it.sets - 1) * it.restSec + 40;
+    s += it.sets * setSeconds(e, it.reps) + Math.max(0, it.sets - 1) * it.restSec + 75; // + переход и подготовка снаряда
   }
   return Math.max(5, Math.round(s / 60 / 5) * 5);
 }
@@ -205,7 +205,7 @@ export function estimateKcal(items: PlanItem[], weightKg: number): number {
     if (!e) continue;
     const active = it.sets * setSeconds(e, it.reps);
     const rest = Math.max(0, it.sets - 1) * it.restSec;
-    kcal += (e.met * weightKg * active) / 3600 + (1.8 * weightKg * rest) / 3600;
+    kcal += (e.met * weightKg * active) / 3600 + (2.3 * weightKg * (rest + 75)) / 3600;
   }
   return Math.round(kcal / 10) * 10;
 }
@@ -218,7 +218,7 @@ export function sessionKcal(s: Session, weightKg: number): number {
     if (!e) continue;
     for (const set of ex.sets) {
       if (!set.done) continue;
-      kcal += (e.met * weightKg * setSeconds(e, set.reps)) / 3600 + (1.8 * weightKg * ex.restSec) / 3600;
+      kcal += (e.met * weightKg * setSeconds(e, set.reps)) / 3600 + (2.3 * weightKg * ex.restSec) / 3600;
     }
   }
   return Math.round(kcal);
