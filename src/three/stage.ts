@@ -1,13 +1,18 @@
 import * as THREE from 'three';
-import { Rig, loadModel, highlightMuscles, type Region, type BoneKey, type Chain, type GroundSpec, type IKGoal, type PinSpec, type Pose, type V3 } from './rig';
+import { Rig, loadModel, highlightMuscles, type Region, type BoneKey, type Chain, type GroundSpec, type HandSpec, type IKGoal, type LeanSpec, type Measures, type PinSpec, type Pose, type V3 } from './rig';
 
 export interface IKSpec {
   /** 'legs' / 'arms' — цель для левой стороны, правая зеркально */
   chain: Chain | 'legs' | 'arms';
-  target: V3 | ((phase: number) => V3);
+  target?: V3 | ((phase: number) => V3);
+  /**
+   * Цель относительно сустава (для 'arms' — сустава левой стороны, правая зеркально).
+   * floor: высота offset[1] считается от пола. anchor: цель вычисляется один раз в этой фазе
+   * и дальше неподвижна — кисти не скользят по полу, пока тело движется.
+   */
+  rel?: { bone: BoneKey; offset?: V3 | ((m: Measures, phase: number) => V3); floor?: boolean; anchor?: number };
   pole?: V3;
 }
-
 /** Примитив реквизита (штанга, скамья, тренажёр собираются из них). Размеры в метрах. */
 export interface Prim {
   s: 'box' | 'cyl' | 'sphere' | 'cable';
@@ -36,6 +41,16 @@ export interface ExerciseAnim {
   flatFeet?: 'both' | 'L' | 'R' | 'none';
   feetTilt?: number;
   ik?: IKSpec[];
+  lean?: LeanSpec | ((phase: number) => LeanSpec);
+  /** ладони плоско на полу (пальцы вперёд, чуть наружу на handSplay градусов) */
+  flatHands?: 'both' | 'L' | 'R';
+  handSplay?: number;
+  /** произвольная ориентация кистей (например, ладони вместе) */
+  hands?: HandSpec | ((phase: number) => HandSpec);
+  /** положение и наклон тела (ground, pin, lean) вычисляются в этой фазе и дальше не меняются — опоры не скользят */
+  place?: number;
+  /** подъём над полом по фазе (прыжки), м */
+  lift?: (phase: number) => number;
   grip?: number;
   props?: Prim[];
   /** ракурс по умолчанию */
@@ -196,6 +211,7 @@ export class Stage {
         if (prim.follow || prim.s === 'cable') this.dynamic.push({ prim, obj });
       }
     }
+    this.computeAnchors();
     this.az = anim.view?.az ?? 35;
     this.el = anim.view?.el ?? 8;
     this.zoom = anim.view?.zoom ?? 1;
@@ -232,19 +248,82 @@ export class Stage {
     this.fitDist = (sphere.radius * 1.08) / Math.sin(half);
   }
 
+  private anchors = new Map<IKSpec, [V3, V3]>();
+
+  /** Опции позы для фазы: IK-цели с учётом зеркала и «якорей». */
+  private applyOpts(phase: number, withIK: boolean) {
+    const a = this.anim!, rig = this.rig!;
+    const ik: IKGoal[] = [];
+    const mirrorBone = (b: BoneKey) => (b.endsWith('L') ? (b.slice(0, -1) + 'R') as BoneKey : b);
+    for (const g of withIK ? a.ik ?? [] : []) {
+      const both = g.chain === 'legs' || g.chain === 'arms';
+      const base = g.chain === 'legs' ? 'leg' : 'arm';
+      const sides: [Chain, boolean][] = both ? [[`${base}L` as Chain, false], [`${base}R` as Chain, true]] : [[g.chain as Chain, false]];
+      sides.forEach(([chain, mir], i) => {
+        const pole = g.pole && mir ? [-g.pole[0], g.pole[1], g.pole[2]] as V3 : g.pole;
+        const anchored = this.anchors.get(g);
+        if (anchored) { ik.push({ chain, target: anchored[i], pole }); return; }
+        if (g.rel) {
+          const o = typeof g.rel.offset === 'function' ? g.rel.offset(rig.measures, phase) : g.rel.offset ?? [0, 0, 0];
+          ik.push({ chain, pole, rel: { bone: mir ? mirrorBone(g.rel.bone) : g.rel.bone, offset: mir ? [-o[0], o[1], o[2]] : o, floor: g.rel.floor } });
+          return;
+        }
+        const t = typeof g.target === 'function' ? g.target(phase) : g.target!;
+        ik.push({ chain, target: mir ? [-t[0], t[1], t[2]] : t, pole });
+      });
+    }
+    let hands: HandSpec | undefined;
+    if (withIK && a.hands) hands = typeof a.hands === 'function' ? a.hands(phase) : a.hands;
+    else if (withIK && a.flatHands) {
+      const sp = Math.tan((a.handSplay ?? 12) * Math.PI / 180);
+      hands = { side: a.flatHands, fingers: [sp, 0, 1], palm: [0, -1, 0] };
+    }
+    const lean = typeof a.lean === 'function' ? a.lean(phase) : a.lean;
+    // с наклоном до касания заземляем именно опору наклона
+    const ground = lean ? { bones: lean.pivot, y: a.ground?.y ?? 0 } : a.ground;
+    return {
+      ground, pin: a.pin, flatFeet: a.flatFeet, feetTilt: a.feetTilt, ik, lean,
+      hands, offset: this.placeOffset, rotOffset: this.placeRot, lift: a.lift?.(phase),
+    };
+  }
+
+  /** Вычислить неподвижные цели кистей/стоп для IK с anchor. */
+  private placeOffset: V3 | undefined;
+  private placeRot: V3 | undefined;
+
+  private computeAnchors() {
+    this.anchors.clear();
+    this.placeOffset = undefined;
+    this.placeRot = undefined;
+    const a = this.anim, rig = this.rig;
+    if (!a || !rig) return;
+    const v = new THREE.Vector3();
+    if (a.place !== undefined) {
+      const pose = a.pose(a.place);
+      rig.apply(pose, this.applyOpts(a.place, false));
+      const p0 = pose.pos ?? [0, 0, 0], r0 = (pose.root ?? [0, 0, 0]).map((x) => x * Math.PI / 180);
+      const rr = rig.root.rotation;
+      this.placeOffset = [rig.root.position.x - p0[0], rig.root.position.y - p0[1], rig.root.position.z - p0[2]];
+      if (a.lean) this.placeRot = [rr.x - r0[0], rr.y - r0[1], rr.z - r0[2]];
+    }
+    for (const g of a.ik ?? []) {
+      if (!g.rel || g.rel.anchor === undefined) continue;
+      rig.apply(a.pose(g.rel.anchor), this.applyOpts(g.rel.anchor, false));
+      const o = typeof g.rel.offset === 'function' ? g.rel.offset(rig.measures, g.rel.anchor) : g.rel.offset ?? [0, 0, 0];
+      const at = (bone: BoneKey, mir: boolean): V3 => {
+        rig.pos(bone, v);
+        return [v.x + (mir ? -o[0] : o[0]), g.rel!.floor ? o[1] : v.y + o[1], v.z + o[2]];
+      };
+      const bone = g.rel.bone;
+      const right = (bone.endsWith('L') ? bone.slice(0, -1) + 'R' : bone) as BoneKey;
+      this.anchors.set(g, [at(bone, false), at(right, true)]);
+    }
+  }
+
   applyPose(phase = this.phase) {
     if (!this.rig || !this.anim) return;
     const a = this.anim;
-    const ik: IKGoal[] = [];
-    for (const g of a.ik ?? []) {
-      const t = typeof g.target === 'function' ? g.target(phase) : g.target;
-      if (g.chain === 'legs' || g.chain === 'arms') {
-        const base = g.chain === 'legs' ? 'leg' : 'arm';
-        ik.push({ chain: `${base}L` as Chain, target: t, pole: g.pole });
-        ik.push({ chain: `${base}R` as Chain, target: [-t[0], t[1], t[2]], pole: g.pole && [-g.pole[0], g.pole[1], g.pole[2]] });
-      } else ik.push({ chain: g.chain, target: t, pole: g.pole });
-    }
-    this.rig.apply(a.pose(phase), { ground: a.ground, pin: a.pin, flatFeet: a.flatFeet, feetTilt: a.feetTilt, ik });
+    this.rig.apply(a.pose(phase), this.applyOpts(phase, true));
     const v = new THREE.Vector3();
     for (const d of this.dynamic) {
       const { prim, obj } = d;

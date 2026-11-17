@@ -11,6 +11,25 @@ type SideBase = (typeof SIDE)[number];
 type CenterKey = (typeof CENTER)[number];
 export type BoneKey = CenterKey | `${SideBase}L` | `${SideBase}R`;
 
+/** Размеры звеньев модели (метры) — чтобы позы на полу не зависели от пропорций конкретной модели. */
+export interface Measures {
+  upperArm: number; forearm: number; arm: number;
+  thigh: number; shin: number; leg: number;
+  torso: number; shoulderWidth: number; hipWidth: number;
+}
+
+/**
+ * Наклон тела до касания: корпус поворачивается (по умолчанию вокруг поперечной оси),
+ * пока сустав `bone` не окажется на высоте `height` над полом, а `pivot` касается пола.
+ * Без height — обе опоры касаются пола (например, носки и предплечья в планке).
+ */
+export interface LeanSpec {
+  pivot: BoneKey[];
+  bone: BoneKey[];
+  height?: number | ((m: Measures) => number);
+  axis?: 'x' | 'z';
+}
+
 /** Поза: углы Эйлера в градусах (порядок XYZ) в T-системе. Ключ без L/R — обе стороны зеркально. */
 export type Pose = Partial<Record<BoneKey | SideBase, V3>> & {
   /** поворот всего тела (YXZ), градусы */
