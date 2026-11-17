@@ -11,7 +11,7 @@ export type Limitation = 'knees' | 'back' | 'shoulders';
 export type WeightUnit = 'kg' | 'lb';
 export type Theme = 'light' | 'dark' | 'auto';
 
-export type Category = 'legs' | 'abs' | 'arms' | 'back' | 'chest' | 'cardio';
+export type Category = 'legs' | 'abs' | 'arms' | 'back' | 'chest' | 'cardio' | 'yoga';
 export type Muscle =
   | 'glutes' | 'quads' | 'hamstrings' | 'calves' | 'adductors' | 'abs' | 'obliques' | 'lowerBack'
   | 'lats' | 'traps' | 'chest' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'heart';

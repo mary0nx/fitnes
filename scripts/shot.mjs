@@ -14,11 +14,12 @@ await page.waitForFunction(() => window.__ready, null, { timeout: 60000 });
 const list = await page.evaluate(() => window.__list);
 const urls = [];
 for (const s of specs) {
-  const [id, phase = '0', az, el] = s.split(':');
+  const [id, phase = '0', az, el, zoom] = s.split(':');
   const e = list.find((x) => x.anim === id);
   const o = { w: size, h: size, hi: e ? e.primary : null, hi2: e ? e.secondary : [], hi3: e ? e.stab : [] };
   if (az) o.az = Number(az);
   if (el) o.el = Number(el);
+  if (zoom) o.zoom = Number(zoom);
   urls.push({ s, url: await page.evaluate(([id, p, o]) => window.__render(id, p, o), [id, Number(phase), o]) });
 }
 const cols = Math.min(urls.length, Number(process.env.COLS || 5));

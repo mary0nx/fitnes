@@ -9,12 +9,13 @@ export const CATEGORY_NAMES: Record<Category, L> = {
   back: x('Спина', 'Plecy'),
   chest: x('Грудь', 'Klatka piersiowa'),
   cardio: x('Кардио и растяжка', 'Kardio i rozciąganie'),
+  yoga: x('Йога', 'Joga'),
 };
 export const CATEGORY_SHORT: Record<Category, L> = {
   legs: x('Ноги', 'Nogi'), abs: x('Пресс', 'Brzuch'), arms: x('Руки', 'Ręce'),
-  back: x('Спина', 'Plecy'), chest: x('Грудь', 'Klatka'), cardio: x('Кардио', 'Kardio'),
+  back: x('Спина', 'Plecy'), chest: x('Грудь', 'Klatka'), cardio: x('Кардио', 'Kardio'), yoga: x('Йога', 'Joga'),
 };
-export const CATEGORIES: Category[] = ['legs', 'abs', 'arms', 'back', 'chest', 'cardio'];
+export const CATEGORIES: Category[] = ['legs', 'abs', 'arms', 'back', 'chest', 'cardio', 'yoga'];
 
 export const MUSCLE_NAMES: Record<Muscle, L> = {
   glutes: x('Ягодичные', 'Pośladki'),
@@ -57,6 +58,9 @@ const STABILIZERS: Record<string, Muscle[]> = {
   lat_pulldown: ['shoulders', 'abs'], seated_row: ['shoulders', 'abs'], dumbbell_row: ['shoulders', 'abs', 'lowerBack'], hyperextension: ['abs'],
   dumbbell_bench_press: ['abs', 'forearms'], chest_press_machine: ['forearms'], pushup: ['lowerBack', 'quads'], dumbbell_fly: ['biceps', 'forearms'],
   walking: ['abs'], running: ['abs', 'shoulders'], bike: ['abs'], elliptical: ['abs'], stretch_forward: [], stretch_side: ['abs'],
+  sumo_squat: ['abs', 'calves'], calf_raise: ['abs'], donkey_kick: ['abs', 'shoulders'], superman: ['traps'],
+  mountain_climber: ['triceps', 'glutes'], side_plank: ['adductors', 'quads'], jumping_jacks: ['abs'],
+  downward_dog: ['abs', 'quads'], cobra: ['shoulders'], child_pose: [], warrior2: ['abs', 'calves'], tree_pose: ['obliques', 'quads'], cat_cow: ['shoulders'],
 };
 
 const RAW: Omit<Exercise, 'stabilizers'>[] = [
@@ -708,6 +712,237 @@ const RAW: Omit<Exercise, 'stabilizers'>[] = [
       x('Отрыв стопы от пола', 'Odrywanie stopy od podłogi'),
     ],
     alternatives: ['stretch_forward', 'walking'],
+  },
+  /* ================= С СОБСТВЕННЫМ ВЕСОМ ================= */
+  {
+    id: 'sumo_squat', name: x('Сумо-приседания', 'Przysiady sumo'), category: 'legs',
+    primary: ['glutes', 'adductors'], secondary: ['quads', 'hamstrings'],
+    equipment: ['none'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'bodyweight', anim: 'sumo_squat', met: 5,
+    avoid: ['knees'],
+    technique: [
+      x('Широкая постановка стоп, носки развёрнуты наружу на 30–45°', 'Szeroki rozstaw stóp, palce skierowane na zewnątrz pod kątem 30–45°'),
+      x('Опускайся вниз, разводя колени по линии носков', 'Opuszczaj się, kierując kolana w linii palców'),
+      x('Корпус почти вертикальный, спина прямая', 'Tułów prawie pionowy, plecy proste'),
+      x('Вставай, сжимая ягодицы и внутреннюю поверхность бёдер', 'Wstawaj, napinając pośladki i wewnętrzną część ud'),
+    ],
+    mistakes: [
+      x('Колени сводятся внутрь', 'Kolana schodzą się do środka'),
+      x('Наклон корпуса вперёд', 'Pochylanie tułowia do przodu'),
+      x('Отрыв пяток от пола', 'Odrywanie pięt od podłogi'),
+    ],
+    alternatives: ['squat_bw', 'goblet_squat', 'lunge'],
+  },
+  {
+    id: 'calf_raise', name: x('Подъём на носки', 'Wspięcia na palce'), category: 'legs',
+    primary: ['calves'], secondary: [],
+    equipment: ['none'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'bodyweight', anim: 'calf_raise', met: 3,
+    technique: [
+      x('Стопы на ширине таза, руки на поясе или у опоры', 'Stopy na szerokość bioder, dłonie na biodrach lub na podporze'),
+      x('Поднимайся на носки как можно выше', 'Wspinaj się na palce jak najwyżej'),
+      x('Задержись наверху на секунду', 'Zatrzymaj się na górze na sekundę'),
+      x('Опускай пятки медленно, не бросая вес', 'Opuszczaj pięty powoli, bez opadania'),
+    ],
+    mistakes: [
+      x('Заваливание стоп наружу или внутрь', 'Przechylanie stóp na zewnątrz lub do środka'),
+      x('Слишком быстрый темп', 'Zbyt szybkie tempo'),
+      x('Сгибание коленей', 'Uginanie kolan'),
+    ],
+    alternatives: ['walking', 'jumping_jacks', 'squat_bw'],
+  },
+  {
+    id: 'donkey_kick', name: x('Махи ногой на четвереньках', 'Wykopy nogą w klęku podpartym'), category: 'legs',
+    primary: ['glutes'], secondary: ['hamstrings'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'bodyweight', anim: 'donkey_kick', met: 3.8,
+    technique: [
+      x('Стань на четвереньки: ладони под плечами, колени под тазом', 'Klęk podparty: dłonie pod barkami, kolana pod biodrami'),
+      x('Поднимай согнутую ногу стопой к потолку', 'Unoś zgiętą nogę stopą w stronę sufitu'),
+      x('Наверху сожми ягодицу, бедро параллельно полу', 'Na górze napnij pośladek, udo równolegle do podłogi'),
+      x('Сделай все повторы и смени ногу', 'Wykonaj wszystkie powtórzenia i zmień nogę'),
+    ],
+    mistakes: [
+      x('Прогиб в пояснице', 'Wyginanie lędźwi'),
+      x('Разворот таза в сторону', 'Skręcanie bioder w bok'),
+      x('Мах по инерции', 'Wymach siłą rozpędu'),
+    ],
+    alternatives: ['glute_bridge', 'kickback', 'superman'],
+  },
+  {
+    id: 'superman', name: x('Супермен', 'Superman'), category: 'back',
+    primary: ['lowerBack'], secondary: ['glutes', 'hamstrings', 'shoulders'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'bodyweight', anim: 'superman', met: 3.5,
+    avoid: ['back'],
+    technique: [
+      x('Ляг на живот, руки вытянуты вперёд', 'Połóż się na brzuchu, ręce wyciągnięte do przodu'),
+      x('Одновременно подними руки, грудь и ноги', 'Jednocześnie unieś ręce, klatkę i nogi'),
+      x('Взгляд в пол, шея продолжает линию спины', 'Wzrok w podłogę, szyja w linii kręgosłupa'),
+      x('Задержись на 1–2 секунды и плавно опустись', 'Zatrzymaj się na 1–2 sekundy i płynnie opuść'),
+    ],
+    mistakes: [
+      x('Запрокидывание головы', 'Zadzieranie głowy'),
+      x('Рывки и раскачивание', 'Szarpanie i bujanie'),
+      x('Слишком высокий подъём через боль в пояснице', 'Zbyt wysokie unoszenie mimo bólu lędźwi'),
+    ],
+    alternatives: ['hyperextension', 'cobra', 'glute_bridge'],
+  },
+  {
+    id: 'mountain_climber', name: x('Скалолаз', 'Wspinaczka (mountain climber)'), category: 'abs',
+    primary: ['abs'], secondary: ['shoulders', 'quads', 'heart'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 2, kind: 'time', anim: 'mountain_climber', met: 8,
+    avoid: ['shoulders'],
+    technique: [
+      x('Упор лёжа: ладони под плечами, тело прямое', 'Podpór przodem: dłonie pod barkami, ciało proste'),
+      x('Поочерёдно подтягивай колени к груди', 'Na zmianę przyciągaj kolana do klatki'),
+      x('Таз остаётся на уровне плеч, не поднимай его', 'Biodra na wysokości barków, nie unoś ich'),
+      x('Дыши ритмично, держи темп, который можешь контролировать', 'Oddychaj rytmicznie, utrzymuj kontrolowane tempo'),
+    ],
+    mistakes: [
+      x('Таз высоко вверху', 'Biodra wysoko w górze'),
+      x('Плечи уходят за ладони', 'Barki uciekają za dłonie'),
+      x('Стопа шлёпает по полу', 'Uderzanie stopą o podłogę'),
+    ],
+    alternatives: ['plank', 'bicycle', 'jumping_jacks'],
+  },
+  {
+    id: 'side_plank', name: x('Боковая планка', 'Deska bokiem'), category: 'abs',
+    primary: ['obliques'], secondary: ['abs', 'shoulders', 'glutes'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 2, kind: 'time', anim: 'side_plank', met: 3.5,
+    avoid: ['shoulders'],
+    technique: [
+      x('Локоть строго под плечом, предплечье на коврике', 'Łokieć dokładnie pod barkiem, przedramię na macie'),
+      x('Тело — прямая линия от головы до стоп', 'Ciało w prostej linii od głowy do stóp'),
+      x('Подними таз и удерживай его, не проваливаясь', 'Unieś biodra i utrzymaj je, nie opadając'),
+      x('Верхнюю руку можно поднять к потолку', 'Górną rękę możesz unieść do sufitu'),
+    ],
+    mistakes: [
+      x('Провисание таза', 'Opadanie bioder'),
+      x('Корпус заваливается вперёд', 'Tułów przechyla się do przodu'),
+      x('Плечо уходит к уху', 'Bark uciekający do ucha'),
+    ],
+    alternatives: ['plank', 'bicycle', 'crunch'],
+  },
+  {
+    id: 'jumping_jacks', name: x('Прыжки «звёздочка»', 'Pajacyki'), category: 'cardio',
+    primary: ['heart'], secondary: ['calves', 'shoulders', 'glutes', 'adductors'],
+    equipment: ['none'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'jumping_jacks', met: 8,
+    avoid: ['knees'],
+    technique: [
+      x('Прыжком расставь ноги и подними руки над головой', 'W podskoku rozstaw nogi i unieś ręce nad głowę'),
+      x('Следующим прыжком вернись в исходное положение', 'Kolejnym podskokiem wróć do pozycji wyjściowej'),
+      x('Приземляйся мягко на носки, колени чуть согнуты', 'Ląduj miękko na palcach, kolana lekko ugięte'),
+      x('Держи ровный ритм и дыши свободно', 'Utrzymuj równy rytm i oddychaj swobodnie'),
+    ],
+    mistakes: [
+      x('Жёсткое приземление на прямые ноги', 'Twarde lądowanie na prostych nogach'),
+      x('Колени сводятся внутрь при приземлении', 'Kolana schodzą się do środka przy lądowaniu'),
+      x('Сутулая спина', 'Zgarbione plecy'),
+    ],
+    alternatives: ['walking', 'running', 'mountain_climber'],
+  },
+
+  /* ================= ЙОГА ================= */
+  {
+    id: 'downward_dog', name: x('Собака мордой вниз', 'Pies z głową w dół'), category: 'yoga',
+    primary: ['hamstrings', 'calves', 'shoulders'], secondary: ['lats', 'triceps'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'downward_dog', met: 2.8,
+    avoid: ['shoulders'],
+    technique: [
+      x('Ладони на ширине плеч, пальцы широко расставлены', 'Dłonie na szerokość barków, palce szeroko rozstawione'),
+      x('Подними таз вверх и назад — тело в форме буквы «Л»', 'Unieś biodra w górę i do tyłu — ciało w kształcie odwróconej litery „V”'),
+      x('Спина вытянута, голова между руками', 'Plecy wyciągnięte, głowa między ramionami'),
+      x('Тянись пятками к полу, колени можно слегка согнуть', 'Kieruj pięty do podłogi, kolana możesz lekko ugiąć'),
+    ],
+    mistakes: [
+      x('Круглая спина', 'Okrągłe plecy'),
+      x('Плечи прижаты к ушам', 'Barki przyciśnięte do uszu'),
+      x('Вес только на руках', 'Ciężar tylko na dłoniach'),
+    ],
+    alternatives: ['child_pose', 'cat_cow', 'stretch_forward'],
+  },
+  {
+    id: 'cobra', name: x('Кобра', 'Kobra'), category: 'yoga',
+    primary: ['lowerBack'], secondary: ['glutes', 'triceps'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'cobra', met: 2.5,
+    technique: [
+      x('Ляг на живот, ладони под плечами, локти прижаты к телу', 'Połóż się na brzuchu, dłonie pod barkami, łokcie przy tułowiu'),
+      x('На вдохе плавно поднимай грудь, вытягиваясь вперёд и вверх', 'Na wdechu płynnie unieś klatkę, wydłużając się do przodu i w górę'),
+      x('Таз и стопы остаются на коврике', 'Biodra i stopy pozostają na macie'),
+      x('Плечи опущены, шея длинная', 'Barki opuszczone, szyja wydłużona'),
+    ],
+    mistakes: [
+      x('Подъём за счёт рук с болью в пояснице', 'Unoszenie siłą rąk z bólem lędźwi'),
+      x('Плечи подняты к ушам', 'Barki uniesione do uszu'),
+      x('Сильно запрокинутая голова', 'Mocno odchylona głowa'),
+    ],
+    alternatives: ['superman', 'child_pose', 'cat_cow'],
+  },
+  {
+    id: 'child_pose', name: x('Поза ребёнка', 'Pozycja dziecka'), category: 'yoga',
+    primary: ['lowerBack', 'lats'], secondary: ['glutes', 'shoulders'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'child_pose', met: 2,
+    technique: [
+      x('Сядь на пятки, колени чуть шире таза', 'Usiądź na piętach, kolana nieco szerzej niż biodra'),
+      x('Наклонись вперёд и опусти грудь между бёдер', 'Pochyl się do przodu i opuść klatkę między uda'),
+      x('Лоб на коврике, руки вытянуты вперёд', 'Czoło na macie, ręce wyciągnięte do przodu'),
+      x('Дыши спокойно и расслабляй спину с каждым выдохом', 'Oddychaj spokojnie i rozluźniaj plecy z każdym wydechem'),
+    ],
+    mistakes: [
+      x('Напряжённые плечи', 'Napięte barki'),
+      x('Задержка дыхания', 'Wstrzymywanie oddechu'),
+      x('Давление через боль в коленях — подложи подушку', 'Nacisk mimo bólu kolan — podłóż poduszkę'),
+    ],
+    alternatives: ['cat_cow', 'downward_dog', 'stretch_forward'],
+  },
+  {
+    id: 'warrior2', name: x('Воин II', 'Wojownik II'), category: 'yoga',
+    primary: ['quads', 'glutes'], secondary: ['adductors', 'shoulders'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'warrior2', met: 3,
+    avoid: ['knees'],
+    technique: [
+      x('Широко расставь ноги, переднюю стопу разверни наружу', 'Rozstaw szeroko nogi, przednią stopę obróć na zewnątrz'),
+      x('Согни переднее колено над пяткой, бедро стремится к параллели', 'Ugnij przednie kolano nad piętą, udo dąży do równoległości'),
+      x('Задняя нога прямая, стопа прижата к полу', 'Tylna noga prosta, stopa przyciśnięta do podłogi'),
+      x('Руки в стороны на уровне плеч, взгляд над передней рукой', 'Ręce w bok na wysokości barków, wzrok nad przednią dłonią'),
+    ],
+    mistakes: [
+      x('Колено уходит за носок или внутрь', 'Kolano wychodzi przed palce lub do środka'),
+      x('Корпус наклоняется к передней ноге', 'Tułów przechyla się nad przednią nogę'),
+      x('Опущенные руки и поднятые плечи', 'Opuszczone ręce i uniesione barki'),
+    ],
+    alternatives: ['lunge', 'tree_pose', 'sumo_squat'],
+  },
+  {
+    id: 'tree_pose', name: x('Поза дерева', 'Pozycja drzewa'), category: 'yoga',
+    primary: ['glutes', 'calves'], secondary: ['adductors', 'abs'],
+    equipment: ['none'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'tree_pose', met: 2.5,
+    technique: [
+      x('Перенеси вес на одну ногу, стопа плотно на полу', 'Przenieś ciężar na jedną nogę, stopa pewnie na podłodze'),
+      x('Поставь стопу другой ноги на внутреннюю сторону бедра или голени', 'Postaw stopę drugiej nogi na wewnętrznej stronie uda lub łydki'),
+      x('Колено отведи в сторону, таз ровный', 'Kolano skieruj w bok, biodra równo'),
+      x('Ладони вместе у груди или над головой, взгляд в одну точку', 'Dłonie razem przy klatce lub nad głową, wzrok w jeden punkt'),
+    ],
+    mistakes: [
+      x('Стопа давит на колено', 'Stopa naciska na kolano'),
+      x('Таз уходит в сторону', 'Biodro ucieka w bok'),
+      x('Задержка дыхания', 'Wstrzymywanie oddechu'),
+    ],
+    alternatives: ['warrior2', 'calf_raise', 'stretch_side'],
+  },
+  {
+    id: 'cat_cow', name: x('Кошка-корова', 'Koci grzbiet'), category: 'yoga',
+    primary: ['lowerBack', 'abs'], secondary: ['obliques', 'traps'],
+    equipment: ['mat'], places: ['home', 'gym', 'outdoor'], level: 1, kind: 'time', anim: 'cat_cow', met: 2.3,
+    technique: [
+      x('Стань на четвереньки: ладони под плечами, колени под тазом', 'Klęk podparty: dłonie pod barkami, kolana pod biodrami'),
+      x('На выдохе округли спину вверх, подбородок к груди', 'Na wydechu zaokrąglij plecy w górę, broda do klatki'),
+      x('На вдохе мягко прогнись, грудь вперёд, взгляд вперёд', 'Na wdechu łagodnie wygnij plecy, klatka do przodu, wzrok przed siebie'),
+      x('Двигайся плавно, в ритме дыхания', 'Poruszaj się płynnie, w rytmie oddechu'),
+    ],
+    mistakes: [
+      x('Резкие движения', 'Gwałtowne ruchy'),
+      x('Сгибание рук в локтях', 'Uginanie łokci'),
+      x('Чрезмерный прогиб в пояснице', 'Nadmierne wygięcie lędźwi'),
+    ],
+    alternatives: ['child_pose', 'downward_dog', 'cobra'],
   },
 ];
 

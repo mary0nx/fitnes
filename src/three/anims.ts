@@ -1,5 +1,5 @@
-import type { ExerciseAnim, Prim } from './stage';
-import { lerpPose, smooth, type BoneKey, type Pose, type V3 } from './pose';
+import type { ExerciseAnim, IKSpec, Prim } from './stage';
+import { lerpPose, smooth, type BoneKey, type LeanSpec, type Measures, type Pose, type V3 } from './pose';
 
 /**
  * Процедурные анимации упражнений: ключевые позы скелета + IK-цели (стопы на
@@ -8,6 +8,8 @@ import { lerpPose, smooth, type BoneKey, type Pose, type V3 } from './pose';
  */
 
 const TAU = Math.PI * 2;
+/** толщина коврика, м */
+const MAT = 0.012;
 const HANG: Pose = { arm: [0, 0, -78], forearm: [0, -10, 0] };
 
 /** A → B → A с плавным ходом и короткими паузами в крайних точках. */
@@ -81,6 +83,20 @@ function seat(back = true, backTilt = 0): Prim[] {
   if (back) out.push({ s: 'box', size: [0.32, 0.62, 0.06], p: [0, 0.22, -0.16 - backTilt * 0.004], r: [-backTilt, 0, 0], c: 'pad', follow: 'hips' });
   return out;
 }
+
+
+/* ---------- опоры на полу ---------- */
+
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+const lerp3 = (a: V3, b: V3, k: number): V3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+/** На четвереньках: бёдра вертикально, голени на коврике, стопы вытянуты. */
+const QUAD: Pose = { root: [90, 0, 0], upLeg: [-90, 0, 4], leg: [92, 0, 0], foot: [68, 0, 0], neck: [-12, 0, 0] };
+const KNEES: BoneKey[] = ['legL', 'legR'];
+/** Плечи над кистями: высота плеча = длина прямой руки. */
+const quadLean = (): LeanSpec => ({ pivot: KNEES, bone: ['armL', 'armR'], height: (m: Measures) => m.arm * 0.985 + 0.03 });
+/** Кисти под плечами, точка опоры фиксируется в фазе anchor. */
+const handsDown = (anchor = 0, out = 0.012, fwd = 0.02): IKSpec =>
+  ({ chain: 'arms', rel: { bone: 'armL', offset: () => [out, 0.03 + MAT, fwd], floor: true, anchor }, pole: [0.3, 0.2, -1] });
 
 /* ---------- позы-заготовки ---------- */
 
@@ -254,12 +270,13 @@ export const ANIMS: Record<string, ExerciseAnim> = {
   plank: {
     pose: (p) => {
       const b = Math.sin(p * TAU);
-      return {
-        root: [78.5, 0, 0], spine: [1.5 * b, 0, 0], spine1: [-1.5 * b, 0, 0], neck: [-18, 0, 0],
-        arm: [-80, 0, -84], forearm: [0, -88, 0], foot: [-62, 0, 0], toe: [-40, 0, 0],
-      };
+      return { root: [90, 0, 0], spine: [1.2 * b, 0, 0], spine1: [-1.2 * b, 0, 0], neck: [-14, 0, 0], foot: [-62, 0, 0], toe: [-42, 0, 0] };
     },
-    duration: 4, ground: { bones: ['toeL', 'toeR', 'forearmL', 'forearmR'] }, pin: { bone: 'toes', z: -0.75 },
+    duration: 4, ground: { bones: ['toeL', 'toeR'], y: MAT }, pin: { bone: 'toes', z: -0.75 },
+    // плечи над локтями: высота плеча = длина плеча + толщина локтя
+    lean: { pivot: ['toeL', 'toeR'], bone: ['armL', 'armR'], height: (m) => m.upperArm + 0.045 },
+    ik: [{ chain: 'arms', rel: { bone: 'armL', offset: (m) => [-0.015, 0.03 + MAT, m.forearm * 0.96], floor: true }, pole: [0.1, -1, -1] }],
+    flatHands: 'both', handSplay: 8,
     props: mat(-0.05), view: { az: 70, el: 10 }, thumb: 0.25,
   },
   leg_raise: {
@@ -440,15 +457,13 @@ export const ANIMS: Record<string, ExerciseAnim> = {
     view: { az: 52, el: 8 }, thumb: 0.5,
   },
   pushup: {
-    pose: (p) => {
-      const k = wave(p);
-      return {
-        root: [65 + 16 * k, 0, 0], neck: [-22, 0, 0], foot: [-58, 0, 0], toe: [-40, 0, 0],
-        arm: [-78, 0, -70], forearm: [0, -10 - 80 * k, 0], hand: [0, 0, 62],
-      };
-    },
-    duration: 2.8, ground: { bones: ['toeL', 'toeR'] }, pin: { bone: 'toes', z: -0.75 },
-    ik: [{ chain: 'arms', target: [0.27, 0.035, 0.5], pole: [0.7, 0.4, -1] }],
+    pose: () => ({ root: [90, 0, 0], neck: [-16, 0, 0], foot: [-62, 0, 0], toe: [-42, 0, 0] }),
+    duration: 2.8, ground: { bones: ['toeL', 'toeR'], y: MAT }, pin: { bone: 'toes', z: -0.75 },
+    // тело — прямая линия, поворачивается вокруг носков; высота плеч: от прямых рук до груди у пола
+    lean: (p) => ({ pivot: ['toeL', 'toeR'], bone: ['armL', 'armR'], height: (m) => 0.03 + (m.arm * 0.985 - (m.arm * 0.985 - 0.16) * wave(p)) }),
+    // кисти стоят на месте: точка опоры вычисляется один раз, в верхней позиции
+    ik: [{ chain: 'arms', rel: { bone: 'armL', offset: () => [0.075, 0.03 + MAT, 0.02], floor: true, anchor: 0 }, pole: [0.4, 0.45, -1] }],
+    flatHands: 'both', handSplay: 18,
     props: mat(-0.05, 2.0), view: { az: 66, el: 10 }, thumb: 0.5,
   },
 
@@ -562,6 +577,175 @@ export const ANIMS: Record<string, ExerciseAnim> = {
     },
     duration: 7, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 }, flatFeet: 'both',
     view: { az: 8, el: 8 }, thumb: 0.25,
+  },
+  /* ===== йога ===== */
+  downward_dog: {
+    pose: (p) => {
+      const b = Math.sin(p * TAU);
+      return { root: [135, 0, 0], upLeg: [-97 - 3 * b, 0, 4], leg: [0, 0, 0], arm: [-4, 0, 84], forearm: [0, -4, 0], neck: [12, 0, 0], spine1: [-2 * b, 0, 0] };
+    },
+    duration: 6, ground: { bones: ['footL', 'footR'], y: MAT }, pin: { bone: 'feet', z: -0.55 },
+    // руки и стопы одновременно на коврике
+    lean: { pivot: ['footL', 'footR'], bone: ['handL', 'handR'] }, flatFeet: 'both',
+    flatHands: 'both', handSplay: 10, grip: 0,
+    props: mat(0.05, 2.0), view: { az: 78, el: 6 }, thumb: 0.25,
+  },
+  cobra: {
+    pose: pingpong(
+      { root: [90, 0, 0], neck: [-10, 0, 0], foot: [62, 0, 0], upLeg: [0, 0, 4] },
+      { root: [90, 0, 0], spine: [-16, 0, 0], spine1: [-18, 0, 0], spine2: [-14, 0, 0], neck: [-18, 0, 0], head: [-8, 0, 0], foot: [62, 0, 0], upLeg: [0, 0, 4] },
+      0.2,
+    ),
+    duration: 7, ground: { bones: ['hips', 'upLegL', 'upLegR', 'legL', 'legR'], y: MAT }, pin: { bone: 'hips', z: 0 },
+    // ладони у груди стоят на месте, пока грудь поднимается
+    ik: [{ chain: 'arms', rel: { bone: 'armL', offset: () => [0.07, 0.03 + MAT, -0.07], floor: true, anchor: 0 }, pole: [0.25, 0.6, -1] }],
+    flatHands: 'both', handSplay: 6, grip: 0,
+    props: mat(0.25), view: { az: 75, el: 8 }, thumb: 0.5,
+  },
+  child_pose: {
+    pose: (p) => {
+      const b = Math.sin(p * TAU);
+      return { root: [104, 0, 0], upLeg: [-158, 0, 14], leg: [158, 0, 0], foot: [58, 0, 0], spine: [6 + 2 * b, 0, 0], spine1: [5 + 2 * b, 0, 0], spine2: [3, 0, 0], neck: [4, 0, 0], arm: [0, 0, 84] };
+    },
+    duration: 6, ground: { bones: ['legL', 'legR', 'footL', 'footR'], y: MAT },
+    // лоб касается коврика
+    lean: { pivot: ['legL', 'legR', 'footL', 'footR'], bone: ['head'], height: 0.085 }, pin: { bone: 'hips', z: -0.25 },
+    ik: [{ chain: 'arms', rel: { bone: 'armL', offset: (m) => [0.03, 0.03 + MAT, m.arm * 0.86], floor: true }, pole: [0, 1, 0] }],
+    flatHands: 'both', handSplay: 4, grip: 0,
+    props: mat(0.1), view: { az: 75, el: 10 }, thumb: 0.25,
+  },
+  warrior2: {
+    pose: (p) => {
+      const k = wave(p, 0.2);
+      return {
+        pos: [0.15 * k, -0.2 * k, 0], upLeg: [0, 0, 43], arm: [0, 0, -78 + 78 * k], forearm: [0, -8 + 8 * k, 0],
+        neck: [0, 34 * k, 0], head: [0, 22 * k, 0], footL: [0, 90, 0], footR: [0, 14, 0],
+      };
+    },
+    duration: 7, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 }, place: 0, flatFeet: 'both', grip: 0,
+    // стопы стоят на месте; переднее колено над стопой, задняя нога прямая
+    ik: [
+      { chain: 'legL', rel: { bone: 'footL', anchor: 0 }, pole: [1, 0, 0.3] },
+      { chain: 'legR', rel: { bone: 'footR', anchor: 0 }, pole: [0, 0, 1] },
+    ],
+    props: mat(0, 1.0).map((m) => ({ ...m, size: [1.9, 0.012, 0.7] as V3 })), view: { az: 8, el: 6 }, thumb: 0.5,
+  },
+  tree_pose: {
+    pose: (p) => {
+      const k = wave(p, 0.18);
+      return { pos: [-0.06 * k, 0, 0], footL: [30 * k, 0, 0], spine2: [0, 0, 0] };
+    },
+    duration: 8, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 }, place: 0, flatFeet: 'R', grip: 0,
+    ik: [
+      { chain: 'legR', rel: { bone: 'footR', anchor: 0 }, pole: [0, 0, 1] },
+      // стопа поднимается дугой и ложится на внутреннюю сторону бедра опорной ноги
+      { chain: 'legL', rel: { bone: 'legR', offset: (m, p) => {
+        const k = wave(p, 0.18);
+        const a: V3 = [m.hipWidth, -m.shin, 0.0], b: V3 = [0.075, 0.13, -0.01];
+        const t = lerp3(a, b, k);
+        return [t[0] + 0.16 * Math.sin(Math.PI * k), t[1], t[2]];
+      } }, pole: [1, 0.05, 0.35] },
+      // руки: вдоль тела → ладони у груди → над головой
+      { chain: 'arms', rel: { bone: 'spine2', offset: (m, p) => {
+        const k = wave(p, 0.18);
+        const side: V3 = [m.shoulderWidth / 2 + 0.03, -m.arm * 0.82, 0.02], chest: V3 = [0.016, -0.03, 0.17], up: V3 = [0.016, m.torso * 0.62 + 0.3, 0.04];
+        return k < 0.5 ? lerp3(side, chest, smooth(clamp01(k * 2))) : lerp3(chest, up, smooth(clamp01(k * 2 - 1)));
+      } }, pole: [1, -0.25, -0.2] },
+    ],
+    hands: (p) => ({ fingers: [0, 1, 0.2], palm: [-1, 0, 0], weight: smooth(clamp01(wave(p, 0.18) * 3)) }),
+    view: { az: 20, el: 6 }, thumb: 0.5,
+  },
+  cat_cow: {
+    pose: (p) => {
+      // кошка: таз подкручивается, спина выгибается дугой вверх; корова — наоборот. Плечи и таз остаются над опорами
+      const c = Math.sin(p * TAU);
+      return {
+        ...QUAD, hips: [-11 * c, 0, 0], spine: [9 * c, 0, 0], spine1: [11 * c, 0, 0], spine2: [6 * c, 0, 0],
+        neck: [-12 + (c > 0 ? 30 : 24) * c, 0, 0], head: [8 * c, 0, 0],
+      };
+    },
+    duration: 6, ground: { bones: KNEES, y: MAT }, lean: quadLean(), pin: { bone: 'hips', z: 0 }, place: 0,
+    ik: [handsDown(0), { chain: 'legs', rel: { bone: 'footL', anchor: 0 }, pole: [0.05, -1, 0.5] }],
+    flatHands: 'both', handSplay: 8, grip: 0,
+    props: mat(0.2), view: { az: 82, el: 6 }, thumb: 0.25,
+  },
+
+  /* ===== с собственным весом ===== */
+  jumping_jacks: {
+    pose: (p) => {
+      const t = (1 - Math.cos(p * TAU)) / 2, air = Math.abs(Math.sin(p * TAU));
+      return { upLeg: [0, 0, 3 + 16 * t], leg: [8 * air, 0, 0], foot: [24 * air, 0, 0], arm: [-6 * t, 0, -78 + 160 * t], forearm: [0, -14 + 10 * t, 0] };
+    },
+    duration: 1.1, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 },
+    lift: (p) => 0.07 * Math.abs(Math.sin(p * TAU)), grip: 0.2,
+    view: { az: 20, el: 6 }, thumb: 0.5,
+  },
+  mountain_climber: {
+    pose: (p) => {
+      const s = Math.sin(p * TAU), aL = smooth(Math.max(0, s)), aR = smooth(Math.max(0, -s));
+      return {
+        root: [90, 0, 0], neck: [-16, 0, 0], foot: [-62, 0, 0], toe: [-42, 0, 0],
+        // колено подтягивается к груди: бедро почти вдоль корпуса, стопа над полом
+        upLegL: [-118 * aL, 0, 3], legL: [148 * aL, 0, 0], footL: [-62 + 70 * aL, 0, 0],
+        upLegR: [-118 * aR, 0, -3], legR: [148 * aR, 0, 0], footR: [-62 + 70 * aR, 0, 0],
+      };
+    },
+    duration: 1.4, ground: { bones: ['toeL', 'toeR'], y: MAT }, pin: { bone: 'spine2', z: 0.3 },
+    // опора — носок той ноги, что остаётся сзади
+    lean: (p) => ({ pivot: Math.sin(p * TAU) > 0 ? ['toeR'] : Math.sin(p * TAU) < 0 ? ['toeL'] : ['toeL', 'toeR'], bone: ['armL', 'armR'], height: (m) => m.arm * 0.985 + 0.03 }),
+    ik: [{ chain: 'arms', rel: { bone: 'armL', offset: () => [0.05, 0.03 + MAT, 0.02], floor: true, anchor: 0 }, pole: [0.4, 0.4, -1] }],
+    flatHands: 'both', handSplay: 15, grip: 0,
+    props: mat(-0.05, 2.0), view: { az: 70, el: 10 }, thumb: 0.25,
+  },
+  side_plank: {
+    pose: (p) => {
+      const k = wave(p, 0.2);
+      return { root: [0, 0, 72], armL: [0, 0, -82 + 82 * k], forearmL: [0, -8 * (1 - k), 0], neck: [0, 0, -6], foot: [10, 0, 0] };
+    },
+    duration: 5, ground: { bones: ['footR', 'toeR'], y: MAT }, pin: { bone: 'footR', x: 0.75, z: 0 },
+    lean: { pivot: ['footR'], bone: ['armR'], height: (m) => m.upperArm + 0.045, axis: 'z' },
+    ik: [{ chain: 'armR', rel: { bone: 'armR', offset: (m) => [0, 0.03 + MAT, m.forearm * 0.96], floor: true }, pole: [0, -1, -0.4] }],
+    flatHands: 'R', handSplay: 0, grip: 0,
+    props: mat(0, 1.0).map((m) => ({ ...m, size: [1.9, 0.012, 0.7] as V3, p: [0.1, 0.006, 0] as V3 })), view: { az: 10, el: 8 }, thumb: 0.5,
+  },
+  superman: {
+    pose: pingpong(
+      { root: [90, 0, 0], arm: [-4, 0, 84], neck: [-8, 0, 0], foot: [55, 0, 0], upLeg: [0, 0, 5] },
+      { root: [90, 0, 0], arm: [-20, 0, 84], spine: [-8, 0, 0], spine1: [-8, 0, 0], spine2: [-6, 0, 0], neck: [-16, 0, 0], upLeg: [14, 0, 5], foot: [55, 0, 0] },
+      0.15,
+    ),
+    duration: 3.6, ground: { bones: ['hips', 'spine', 'spine1'], y: MAT }, pin: { bone: 'hips', z: 0 }, grip: 0.1,
+    props: mat(0.1, 2.2), view: { az: 72, el: 10 }, thumb: 0.5,
+  },
+  donkey_kick: {
+    pose: (p) => {
+      const k = wave(p, 0.1);
+      return { ...QUAD, upLegL: [-90 + 102 * k, 0, 4], legL: [92 - 6 * k, 0, 0], footL: [68 * (1 - k) - 6 * k, 0, 0], hips: [-3 * k, 0, 0] };
+    },
+    duration: 2.6, ground: { bones: KNEES, y: MAT }, lean: quadLean(), pin: { bone: 'hips', z: 0 }, place: 0,
+    ik: [handsDown(0), { chain: 'legR', rel: { bone: 'footR', anchor: 0 }, pole: [-0.05, -1, 0.5] }], flatHands: 'both', handSplay: 8, grip: 0,
+    props: mat(0.2), view: { az: 80, el: 8 }, thumb: 0.5,
+  },
+  sumo_squat: {
+    pose: pingpong(
+      { hips: [3, 0, 0], upLeg: [-4, 34, 22], leg: [4, 0, 0], foot: [0, 40, 0] },
+      { hips: [20, 0, 0], spine: [-6, 0, 0], neck: [-10, 0, 0], upLeg: [-94, 40, 22], leg: [96, 0, 0], foot: [0, 40, 0] },
+    ),
+    duration: 3, ground: { bones: FEET }, pin: { bone: 'feet', x: 0, z: 0 }, flatFeet: 'both', grip: 0.8,
+    ik: [{ chain: 'arms', rel: { bone: 'spine2', offset: () => [0.03, -0.06, 0.2] }, pole: [1, -0.6, -0.2] }],
+    view: { az: 25, el: 8 }, thumb: 0.5,
+  },
+  calf_raise: {
+    pose: pingpong(
+      { upLeg: [0, 0, 3], foot: [0, 0, 0], toe: [0, 0, 0] },
+      { upLeg: [0, 0, 3], foot: [40, 0, 0], toe: [-38, 0, 0] },
+      0.12,
+    ),
+    duration: 2.4, ground: { bones: FEET }, pin: { bone: 'toes', x: 0, z: 0.05 }, grip: 0,
+    // руки на поясе
+    ik: [{ chain: 'arms', rel: { bone: 'hips', offset: (m) => [m.hipWidth / 2 + 0.1, 0.08, -0.03] }, pole: [0.6, 0, -1] }],
+    hands: { fingers: [0, -0.3, 1], palm: [-1, 0, 0] },
+    view: { az: 70, el: 6 }, thumb: 0.5,
   },
 };
 

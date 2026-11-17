@@ -12,8 +12,8 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
  * подставить без переписывания анимаций.
  */
 
-import { CENTER, SIDE, type BoneKey, type Pose, type V3 } from './pose';
-export type { BoneKey, Pose, V3 } from './pose';
+import { CENTER, SIDE, type BoneKey, type LeanSpec, type Measures, type Pose, type V3 } from './pose';
+export type { BoneKey, LeanSpec, Measures, Pose, V3 } from './pose';
 
 /** Имена костей: Mixamo (LeftUpLeg …) и 3ds Max Biped (Bip01_L_Thigh …). */
 const NAME: Record<string, string> = {
@@ -72,7 +72,8 @@ export function loadModel(url = MODEL_URL): Promise<THREE.Group> {
 export interface GroundSpec { bones: BoneKey[]; y?: number }
 export interface PinSpec { bone: BoneKey | 'feet' | 'hands' | 'toes'; x?: number; z?: number }
 export type Chain = 'legL' | 'legR' | 'armL' | 'armR';
-export interface IKGoal { chain: Chain; target: V3; pole?: V3 }
+/** Цель IK: точка в мире или точка относительно сустава (floor — высота задана от пола). */
+export interface IKGoal { chain: Chain; target?: V3; pole?: V3; rel?: { bone: BoneKey; offset: V3; floor?: boolean } }
 export interface ApplyOptions {
   ground?: GroundSpec;
   pin?: PinSpec;
@@ -81,7 +82,17 @@ export interface ApplyOptions {
   /** наклон опоры под стопами, градусы вокруг X (платформа тренажёра) */
   feetTilt?: number;
   ik?: IKGoal[];
+  lean?: LeanSpec;
+  /** ориентация кистей: куда смотрят пальцы и ладонь (вектора для левой руки, правая зеркально) */
+  hands?: HandSpec;
+  /** зафиксированное положение тела вместо ground/pin (см. ExerciseAnim.place) */
+  offset?: V3;
+  /** зафиксированный доворот корпуса вместо lean, радианы */
+  rotOffset?: V3;
+  /** подъём над полом после заземления (прыжки), м */
+  lift?: number;
 }
+export interface HandSpec { side?: 'both' | 'L' | 'R'; fingers: V3; palm: V3; weight?: number }
 
 const CHAINS: Record<Chain, [BoneKey, BoneKey, BoneKey]> = {
   legL: ['upLegL', 'legL', 'footL'], legR: ['upLegR', 'legR', 'footR'],
@@ -96,6 +107,8 @@ export class Rig {
   /** высота сустава над опорой для каждой кости */
   private radius = new Map<BoneKey, number>();
   readonly model: THREE.Object3D;
+  measures!: Measures;
+  private handBasis: Partial<Record<'L' | 'R', { dir: THREE.Vector3; palm: THREE.Vector3 }>> = {};
 
   constructor(source: THREE.Group) {
     const model = cloneSkinned(source);
@@ -161,10 +174,32 @@ export class Rig {
     }
     const R: Partial<Record<BoneKey, number>> = {
       hips: 0.1, spine: 0.1, spine1: 0.11, spine2: 0.12, head: 0.1, neck: 0.06,
-      handL: 0.025, handR: 0.025, forearmL: 0.04, forearmR: 0.04, legL: 0.055, legR: 0.055,
+      handL: 0.03, handR: 0.03, forearmL: 0.04, forearmR: 0.04, legL: 0.055, legR: 0.055,
       upLegL: 0.09, upLegR: 0.09, armL: 0.05, armR: 0.05,
     };
     for (const k in R) this.radius.set(k as BoneKey, R[k as BoneKey]!);
+
+    const P = (k: BoneKey) => this.pos(k, new THREE.Vector3());
+    const dist = (a: BoneKey, b: BoneKey) => P(a).distanceTo(P(b));
+    const upperArm = dist('armL', 'forearmL'), forearm = dist('forearmL', 'handL');
+    const thigh = dist('upLegL', 'legL'), shin = dist('legL', 'footL');
+    this.measures = {
+      upperArm, forearm, arm: upperArm + forearm, thigh, shin, leg: thigh + shin,
+      torso: dist('hips', 'neck'), shoulderWidth: dist('armL', 'armR'), hipWidth: dist('upLegL', 'upLegR'),
+    };
+    // ориентация ладони в исходной позе: направление пальцев и нормаль ладони
+    for (const side of ['L', 'R'] as const) {
+      const wrist = this.info.get(`hand${side}`)?.bone;
+      const mid = byName.get(`Bip:${side}_Finger2`) ?? byName.get(`${side === 'L' ? 'Left' : 'Right'}HandMiddle1`);
+      const thumb = byName.get(`Bip:${side}_Finger0`) ?? byName.get(`${side === 'L' ? 'Left' : 'Right'}HandThumb1`);
+      if (!wrist || !mid || !thumb) continue;
+      const w = wrist.getWorldPosition(new THREE.Vector3());
+      const dir = mid.getWorldPosition(new THREE.Vector3()).sub(w).normalize();
+      const th = thumb.getWorldPosition(new THREE.Vector3()).sub(w);
+      th.addScaledVector(dir, -th.dot(dir)).normalize();
+      const palm = side === 'L' ? new THREE.Vector3().crossVectors(dir, th) : new THREE.Vector3().crossVectors(th, dir);
+      this.handBasis[side] = { dir, palm: palm.normalize() };
+    }
 
     byName.forEach((bone, name) => {
       const m = /^(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)([123])$/.exec(name);
@@ -261,21 +296,32 @@ export class Rig {
     }
     this.root.updateMatrixWorld(true);
 
-    if (opts.ground) {
+    if (opts.rotOffset) {
+      this.root.rotation.x += opts.rotOffset[0]; this.root.rotation.y += opts.rotOffset[1]; this.root.rotation.z += opts.rotOffset[2];
+      this.root.updateMatrixWorld(true);
+    } else if (opts.lean) this.solveLean(opts.lean);
+    const ground = opts.offset ? undefined : opts.ground ?? (opts.lean ? { bones: opts.lean.pivot } : undefined);
+    if (opts.offset) {
+      this.root.position.add(new THREE.Vector3(opts.offset[0], opts.offset[1], opts.offset[2]));
+      this.root.updateMatrixWorld(true);
+    }
+    if (ground) {
       let min = Infinity;
-      for (const k of opts.ground.bones) {
+      for (const k of ground.bones) {
         const y = this.pos(k, _v).y - (this.radius.get(k) ?? 0.05);
         if (y < min) min = y;
       }
-      if (isFinite(min)) this.root.position.y += (opts.ground.y ?? 0) - min;
+      if (isFinite(min)) this.root.position.y += (ground.y ?? 0) - min;
       this.root.updateMatrixWorld(true);
     }
-    if (opts.pin) {
+    if (opts.pin && !opts.offset) {
       const c = this.point(opts.pin.bone);
       if (opts.pin.x !== undefined) this.root.position.x += opts.pin.x - c.x;
       if (opts.pin.z !== undefined) this.root.position.z += opts.pin.z - c.z;
       this.root.updateMatrixWorld(true);
     }
+
+    if (opts.lift) { this.root.position.y += opts.lift; this.root.updateMatrixWorld(true); }
 
     for (const g of opts.ik ?? []) this.solveIK(g);
 
@@ -299,6 +345,50 @@ export class Rig {
       }
       this.root.updateMatrixWorld(true);
     }
+
+    const hs = opts.hands;
+    if (hs) {
+      const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r[1] * D2R);
+      for (const side of ['L', 'R'] as const) {
+        if (hs.side && hs.side !== 'both' && hs.side !== side) continue;
+        const i = this.info.get(`hand${side}`), hb = this.handBasis[side];
+        if (!i || !hb) continue;
+        const m = side === 'R' ? -1 : 1;
+        const f = new THREE.Vector3(hs.fingers[0] * m, hs.fingers[1], hs.fingers[2]).applyQuaternion(yaw);
+        const pl = new THREE.Vector3(hs.palm[0] * m, hs.palm[1], hs.palm[2]).applyQuaternion(yaw);
+        const q = basisQuat(f, pl).multiply(basisQuat(hb.dir, hb.palm).invert());
+        const desired = q.multiply(i.bindWorld);
+        const w = hs.weight ?? 1;
+        if (w < 1) desired.copy(i.bone.getWorldQuaternion(new THREE.Quaternion()).slerp(desired, Math.max(0, w)));
+        i.bone.quaternion.copy(i.bone.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(desired));
+      }
+      this.root.updateMatrixWorld(true);
+    }
+  }
+
+  /** Подбор наклона корпуса (метод секущих): опора `bone` на нужной высоте, `pivot` на полу. */
+  private solveLean(spec: LeanSpec) {
+    const ax = spec.axis ?? 'x';
+    const base = this.root.rotation[ax];
+    const target = typeof spec.height === 'function' ? spec.height(this.measures)
+      : spec.height ?? Math.min(...spec.bone.map((k) => this.radius.get(k) ?? 0.05));
+    const err = (d: number) => {
+      this.root.rotation[ax] = base + d;
+      this.root.updateMatrixWorld(true);
+      let piv = Infinity, b = Infinity;
+      for (const k of spec.pivot) piv = Math.min(piv, this.pos(k, _v).y - (this.radius.get(k) ?? 0.05));
+      for (const k of spec.bone) b = Math.min(b, this.pos(k, _v).y);
+      return b - piv - target;
+    };
+    let x0 = 0, f0 = err(x0), x1 = 4 * D2R, f1 = err(x1);
+    for (let i = 0; i < 10 && Math.abs(f1) > 2e-4; i++) {
+      const den = f1 - f0;
+      if (Math.abs(den) < 1e-9) break;
+      const step = Math.max(-0.5, Math.min(0.5, -f1 * (x1 - x0) / den));
+      x0 = x1; f0 = f1; x1 += step; f1 = err(x1);
+    }
+    this.root.rotation[ax] = base + x1;
+    this.root.updateMatrixWorld(true);
   }
 
   /** Аналитическая двухзвенная IK: стопа/кисть точно попадает в цель (педаль, гриф, пол). */
@@ -310,7 +400,13 @@ export class Rig {
     const b = this.pos(kb, new THREE.Vector3());
     const c = this.pos(kc, new THREE.Vector3());
     const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
-    const t = new THREE.Vector3(g.target[0], g.target[1], g.target[2]);
+    let t: THREE.Vector3;
+    if (g.rel) {
+      const o = g.rel.offset;
+      t = this.pos(g.rel.bone, new THREE.Vector3()).add(new THREE.Vector3(o[0], o[1], o[2]));
+      if (g.rel.floor) t.y = o[1];
+    } else if (g.target) t = new THREE.Vector3(g.target[0], g.target[1], g.target[2]);
+    else return;
     const dir = t.clone().sub(a);
     const dist = Math.min(Math.max(dir.length(), Math.abs(l1 - l2) + 1e-3), l1 + l2 - 1e-3);
     dir.normalize();
@@ -542,4 +638,12 @@ export function highlightMuscles(model: THREE.Object3D, primary: Region[] | null
     const st = m.isSkinnedMesh ? styled.get(m) : undefined;
     if (st) applyMuscles(st, primary, secondary, stabilizers);
   });
+}
+
+/** Поворот, переводящий оси (x → dir, y → up) в мировые. */
+function basisQuat(dir: THREE.Vector3, up: THREE.Vector3): THREE.Quaternion {
+  const x = dir.clone().normalize();
+  const z = new THREE.Vector3().crossVectors(x, up).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
 }

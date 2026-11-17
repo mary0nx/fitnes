@@ -10,53 +10,53 @@ export const WORKOUT_NAMES: Record<WorkoutType, L> = {
   full: { ru: 'Всё тело', pl: 'Całe ciało' },
   cardio: { ru: 'Кардио и пресс', pl: 'Kardio i brzuch' },
   glutes: { ru: 'Ягодицы и пресс', pl: 'Pośladki i brzuch' },
-  recovery: { ru: 'Восстановление', pl: 'Regeneracja' },
+  recovery: { ru: 'Йога и восстановление', pl: 'Joga i regeneracja' },
   custom: { ru: 'Моя тренировка', pl: 'Mój trening' },
 };
 
 /** обложка тренировки — миниатюра «главного» упражнения */
 export const COVER: Record<WorkoutType, string> = {
   legs: 'barbell_squat', upper: 'shoulder_press', full: 'goblet_squat', cardio: 'running',
-  glutes: 'glute_bridge', recovery: 'stretch_forward', custom: 'biceps_curl',
+  glutes: 'glute_bridge', recovery: 'downward_dog', custom: 'biceps_curl',
 };
 
 /** Слоты: в каждом — кандидаты по приоритету; берётся первый доступный. */
 const SLOTS: Record<Exclude<WorkoutType, 'custom' | 'recovery' | 'cardio'>, string[][]> = {
   legs: [
     ['barbell_squat', 'goblet_squat', 'squat_bw'],
-    ['leg_press', 'hack_squat', 'lunge', 'squat_bw'],
+    ['leg_press', 'hack_squat', 'sumo_squat', 'lunge', 'squat_bw'],
     ['romanian_deadlift', 'glute_bridge'],
     ['bulgarian_split', 'lunge', 'glute_bridge'],
-    ['kickback', 'glute_bridge', 'reverse_crunch'],
-    ['leg_curl', 'leg_extension', 'plank', 'crunch'],
+    ['kickback', 'donkey_kick', 'glute_bridge', 'reverse_crunch'],
+    ['leg_curl', 'leg_extension', 'calf_raise', 'plank', 'crunch'],
   ],
   upper: [
     ['lat_pulldown', 'dumbbell_row', 'pushup'],
     ['dumbbell_bench_press', 'chest_press_machine', 'pushup', 'plank'],
     ['shoulder_press', 'lateral_raise', 'crunch'],
-    ['seated_row', 'dumbbell_row', 'hyperextension', 'bicycle'],
+    ['seated_row', 'dumbbell_row', 'hyperextension', 'superman', 'bicycle'],
     ['biceps_curl', 'lateral_raise', 'reverse_crunch'],
     ['triceps_extension', 'front_raise', 'leg_raise', 'plank'],
   ],
   full: [
     ['goblet_squat', 'leg_press', 'squat_bw'],
     ['romanian_deadlift', 'glute_bridge'],
-    ['dumbbell_row', 'lat_pulldown', 'pushup', 'lunge'],
+    ['dumbbell_row', 'lat_pulldown', 'superman', 'pushup', 'lunge'],
     ['pushup', 'chest_press_machine', 'dumbbell_bench_press', 'plank'],
     ['lateral_raise', 'shoulder_press', 'lunge', 'crunch'],
-    ['plank', 'crunch', 'bicycle'],
+    ['plank', 'mountain_climber', 'crunch', 'bicycle'],
   ],
   glutes: [
     ['glute_bridge'],
     ['bulgarian_split', 'lunge', 'squat_bw'],
-    ['romanian_deadlift', 'squat_bw', 'lunge'],
-    ['kickback', 'hyperextension', 'squat_bw', 'reverse_crunch'],
+    ['romanian_deadlift', 'sumo_squat', 'squat_bw', 'lunge'],
+    ['kickback', 'donkey_kick', 'hyperextension', 'squat_bw', 'reverse_crunch'],
     ['reverse_crunch', 'leg_raise', 'crunch'],
-    ['plank', 'bicycle'],
+    ['side_plank', 'plank', 'bicycle'],
   ],
 };
 
-const CORE = ['crunch', 'bicycle', 'plank', 'reverse_crunch', 'leg_raise'];
+const CORE = ['crunch', 'bicycle', 'mountain_climber', 'plank', 'side_plank', 'reverse_crunch', 'leg_raise'];
 
 export function isAvailable(e: Exercise, p: Pick<Profile, 'place' | 'level' | 'limitations'>): boolean {
   if (!e.places.includes(p.place)) return false;
@@ -69,6 +69,9 @@ export function isAvailable(e: Exercise, p: Pick<Profile, 'place' | 'level' | 'l
 export function prescription(e: Exercise, goal: Goal, level: Level): Omit<PlanItem, 'exerciseId'> {
   if (e.kind === 'cardio') return { sets: 1, reps: [15, 20, 25][level - 1], restSec: 0 };
   if (e.kind === 'time') {
+    if (e.category === 'yoga') return { sets: 2, reps: [30, 40, 50][level - 1], restSec: 15 };
+    // интервальное кардио («звёздочка», скалолаз)
+    if (e.primary.includes('heart') || e.secondary.includes('heart')) return { sets: 3, reps: [30, 40, 45][level - 1], restSec: 30 };
     return e.category === 'cardio'
       ? { sets: 2, reps: 40, restSec: 15 }
       : { sets: 3, reps: [30, 45, 60][level - 1], restSec: 40 };
@@ -84,7 +87,7 @@ const item = (id: string, goal: Goal, level: Level, over: Partial<PlanItem> = {}
   ({ exerciseId: id, ...prescription(EX_BY_ID[id], goal, level), ...over });
 
 function cardioPick(p: Profile): string {
-  const order = p.place === 'gym' ? ['elliptical', 'bike', 'walking'] : p.place === 'outdoor' ? ['running', 'walking'] : ['walking'];
+  const order = p.place === 'gym' ? ['elliptical', 'bike', 'walking'] : p.place === 'outdoor' ? ['running', 'jumping_jacks', 'walking'] : ['jumping_jacks', 'walking'];
   return order.find((id) => isAvailable(EX_BY_ID[id], p)) ?? 'walking';
 }
 
@@ -99,9 +102,11 @@ function buildWorkout(type: WorkoutType, p: Profile): WorkoutTemplate {
   };
   const warm = cardioPick({ ...p, limitations: [...p.limitations, 'knees'] }); // разминка всегда щадящая
   if (type === 'recovery') {
+    // восстановление — спокойная ходьба и йога-комплекс
     items.push(item('walking', goal, level, { reps: 10 }));
-    for (const id of ['stretch_side', 'stretch_forward', 'glute_bridge', 'plank']) {
-      if (isAvailable(EX_BY_ID[id], p)) items.push(item(id, goal, level, id === 'glute_bridge' ? { sets: 2, reps: 12 } : id === 'plank' ? { sets: 2, reps: 30 } : {}));
+    for (const id of ['cat_cow', 'downward_dog', 'warrior2', 'tree_pose', 'cobra', 'child_pose', 'stretch_side', 'stretch_forward']) {
+      if (items.length >= 7) break;
+      if (isAvailable(EX_BY_ID[id], p)) items.push(item(id, goal, level));
     }
   } else if (type === 'cardio') {
     items.push(item(cardioPick(p), goal, level));
